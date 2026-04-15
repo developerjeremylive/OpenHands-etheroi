@@ -131,6 +131,7 @@ Frontend:
   - Available variables: VITE_BACKEND_HOST, VITE_USE_TLS, VITE_INSECURE_SKIP_VERIFY, VITE_FRONTEND_PORT
 - Internationalization:
   - Generate i18n declaration file: `npm run make-i18n`
+  - Pre-commit runs `npm run check-translation-completeness`; every translation key must include all languages listed in `frontend/src/i18n/index.ts` (including `ca`) or the hook will fail.
 - Data Fetching & Cache Management:
   - We use TanStack Query (fka React Query) for data fetching and cache management
   - Data Access Layer: API client methods are located in `frontend/src/api` and should never be called directly from UI components - they must always be wrapped with TanStack Query
