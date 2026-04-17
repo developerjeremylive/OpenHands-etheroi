@@ -3,6 +3,7 @@ import { AxiosError } from "axios";
 import { useTranslation } from "react-i18next";
 import { BrandButton } from "#/components/features/settings/brand-button";
 import { LlmSettingsInputsSkeleton } from "#/components/features/settings/llm-settings/llm-settings-inputs-skeleton";
+import { ConfirmationModal } from "#/components/shared/modals/confirmation-modal";
 import { useSaveSettings } from "#/hooks/mutation/use-save-settings";
 import { usePermission } from "#/hooks/organizations/use-permissions";
 import {
@@ -23,6 +24,7 @@ import { retrieveAxiosErrorMessage } from "#/utils/retrieve-axios-error-message"
 import {
   buildInitialSettingsFormValues,
   buildSdkSettingsPayloadForView,
+  getHiddenSettingsFieldsToReset,
   getVisibleSettingsSections,
   hasAdvancedSettings,
   hasMinorSettings,
@@ -127,6 +129,10 @@ export function SdkSectionPage({
   const [view, setView] = React.useState<SettingsView>("basic");
   const [values, setValues] = React.useState<SettingsFormValues>({});
   const [dirty, setDirty] = React.useState<SettingsDirtyState>({});
+  const [isHiddenSettingsModalOpen, setIsHiddenSettingsModalOpen] =
+    React.useState(false);
+  const [hiddenSettingsResetCount, setHiddenSettingsResetCount] =
+    React.useState(0);
   const hasHydratedViewRef = React.useRef(false);
 
   const sectionKeysSignature = React.useMemo(
@@ -172,6 +178,8 @@ export function SdkSectionPage({
     setView("basic");
     setValues({});
     setDirty({});
+    setIsHiddenSettingsModalOpen(false);
+    setHiddenSettingsResetCount(0);
   }, [scope, settingsSource, sectionKeysSignature]);
 
   React.useEffect(() => {
@@ -215,8 +223,20 @@ export function SdkSectionPage({
     [t],
   );
 
-  const handleSave = () => {
+  const handleSave = (resetHiddenFields = false) => {
     if (!filteredSchema || isReadOnly) return;
+
+    const hiddenFieldsToReset = getHiddenSettingsFieldsToReset(
+      filteredSchema,
+      values,
+      view,
+    );
+
+    if (!resetHiddenFields && hiddenFieldsToReset.length > 0) {
+      setHiddenSettingsResetCount(hiddenFieldsToReset.length);
+      setIsHiddenSettingsModalOpen(true);
+      return;
+    }
 
     let payload: Record<string, unknown>;
     try {
@@ -225,6 +245,7 @@ export function SdkSectionPage({
         values,
         dirty,
         view,
+        { resetHiddenFields },
       );
       const defaultPayload =
         settingsSource === "conversation_settings"
@@ -247,6 +268,8 @@ export function SdkSectionPage({
       onSuccess: () => {
         displaySuccessToast(t(I18nKey.SETTINGS$SAVED_WARNING));
         setDirty({});
+        setIsHiddenSettingsModalOpen(false);
+        setHiddenSettingsResetCount(0);
         onSaveSuccess?.();
       },
     });
@@ -312,13 +335,26 @@ export function SdkSectionPage({
             isDisabled={
               isPending || (Object.keys(dirty).length === 0 && !extraDirty)
             }
-            onClick={handleSave}
+            onClick={() => handleSave()}
           >
             {isPending
               ? t(I18nKey.SETTINGS$SAVING)
               : t(I18nKey.SETTINGS$SAVE_CHANGES)}
           </BrandButton>
         </div>
+      ) : null}
+
+      {isHiddenSettingsModalOpen ? (
+        <ConfirmationModal
+          text={t(I18nKey.SETTINGS$CONFIRM_RESET_HIDDEN_FIELDS, {
+            count: hiddenSettingsResetCount,
+          })}
+          onCancel={() => {
+            setIsHiddenSettingsModalOpen(false);
+            setHiddenSettingsResetCount(0);
+          }}
+          onConfirm={() => handleSave(true)}
+        />
       ) : null}
     </div>
   );

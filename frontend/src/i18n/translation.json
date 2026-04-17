@@ -2056,6 +2056,9 @@
     "uk": "Зберегти зміни",
     "ca": "Desa els canvis"
   },
+  "SETTINGS$CONFIRM_RESET_HIDDEN_FIELDS": {
+    "en": "Saving from this view will reset {{count}} hidden setting(s) to their default values. Continue?"
+  },
   "SETTINGS$SDK_SCHEMA_UNAVAILABLE": {
     "en": "SDK settings schema unavailable.",
     "ja": "SDK設定スキーマを利用できません。",

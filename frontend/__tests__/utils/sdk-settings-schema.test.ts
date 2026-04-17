@@ -4,6 +4,7 @@ import {
   buildInitialSettingsFormValues,
   buildSdkSettingsPayload,
   buildSdkSettingsPayloadForView,
+  getHiddenSettingsFieldsToReset,
   getVisibleSettingsSections,
   hasAdvancedSettingsOverrides,
   inferInitialView,
@@ -327,6 +328,93 @@ describe("sdk settings schema helpers", () => {
         litellm_extra_body: { metadata: { tier: "enterprise" } },
       },
       critic: { enabled: true, mode: "all_actions" },
+    });
+  });
+
+  it("detects hidden non-default fields that would be reset by a less-detailed save", () => {
+    const schema = structuredClone(BASE_SETTINGS.agent_settings_schema!);
+    schema.sections[0].fields.push({
+      key: "llm.timeout",
+      label: "Timeout",
+      section: "llm",
+      section_label: "LLM",
+      value_type: "integer",
+      default: 30,
+      choices: [],
+      depends_on: [],
+      prominence: "major",
+      secret: false,
+      required: false,
+    });
+
+    const values = {
+      ...buildInitialSettingsFormValues({
+        ...BASE_SETTINGS,
+        agent_settings_schema: schema,
+      }),
+      "llm.base_url": "https://custom.example/v1",
+      "llm.timeout": "90",
+      "critic.enabled": false,
+      "critic.mode": "all_actions",
+    };
+
+    expect(
+      getHiddenSettingsFieldsToReset(schema, values, "basic").map((field) => field.key),
+    ).toEqual(["llm.timeout", "critic.mode"]);
+
+    expect(
+      getHiddenSettingsFieldsToReset(schema, values, "advanced").map(
+        (field) => field.key,
+      ),
+    ).toEqual(["critic.mode"]);
+  });
+
+  it("can reset hidden non-default fields to defaults when save is confirmed", () => {
+    const schema = structuredClone(BASE_SETTINGS.agent_settings_schema!);
+    schema.sections[0].fields.push({
+      key: "llm.timeout",
+      label: "Timeout",
+      section: "llm",
+      section_label: "LLM",
+      value_type: "integer",
+      default: 30,
+      choices: [],
+      depends_on: [],
+      prominence: "major",
+      secret: false,
+      required: false,
+    });
+
+    const values = {
+      ...buildInitialSettingsFormValues({
+        ...BASE_SETTINGS,
+        agent_settings_schema: schema,
+      }),
+      "llm.model": "anthropic/claude-sonnet-4-20250514",
+      "llm.base_url": "https://custom.example/v1",
+      "llm.timeout": "90",
+      "critic.enabled": false,
+      "critic.mode": "all_actions",
+    };
+
+    const dirty = {
+      "llm.model": true,
+      "llm.base_url": false,
+      "llm.timeout": false,
+      "critic.enabled": false,
+      "critic.mode": false,
+    };
+
+    expect(
+      buildSdkSettingsPayloadForView(schema, values, dirty, "basic", {
+        resetHiddenFields: true,
+      }),
+    ).toEqual({
+      critic: { mode: "finish_and_message" },
+      llm: {
+        model: "anthropic/claude-sonnet-4-20250514",
+        timeout: 30,
+      },
     });
   });
 });

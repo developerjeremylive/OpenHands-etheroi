@@ -406,21 +406,68 @@ function isFieldVisibleInView(
   return VIEW_PROMINENCES[view].has(field.prominence);
 }
 
+function hasNonDefaultFieldValue(
+  field: SettingsFieldSchema,
+  rawValue: string | boolean,
+): boolean {
+  return (
+    normalizeComparableValue(field, rawValue) !==
+    normalizeComparableValue(field, field.default)
+  );
+}
+
+function getFieldDefaultFormValue(
+  field: SettingsFieldSchema,
+): string | boolean {
+  return normalizeFieldValue(field, field.default);
+}
+
+export function getHiddenSettingsFieldsToReset(
+  schema: SettingsSchema,
+  values: SettingsFormValues,
+  view: SettingsView,
+): SettingsFieldSchema[] {
+  return getSchemaFields(schema).filter((field) => {
+    const isVisible =
+      isFieldVisibleInView(field, view) &&
+      isSettingsFieldVisible(field, values);
+    if (isVisible) {
+      return false;
+    }
+
+    return hasNonDefaultFieldValue(field, values[field.key]);
+  });
+}
+
 export function buildSdkSettingsPayloadForView(
   schema: SettingsSchema,
   values: SettingsFormValues,
   dirty: SettingsDirtyState,
   view: SettingsView,
+  options?: {
+    resetHiddenFields?: boolean;
+  },
 ): SdkSettingsPayload {
   const payload: Record<string, unknown> = {};
+  const resetHiddenFields = options?.resetHiddenFields ?? false;
 
   for (const field of getSchemaFields(schema)) {
-    if (
-      dirty[field.key] &&
+    const isVisible =
       isFieldVisibleInView(field, view) &&
-      isSettingsFieldVisible(field, values)
-    ) {
+      isSettingsFieldVisible(field, values);
+
+    if (dirty[field.key] && isVisible) {
       setDotted(payload, field.key, coerceFieldValue(field, values[field.key]));
+    } else if (
+      resetHiddenFields &&
+      !isVisible &&
+      hasNonDefaultFieldValue(field, values[field.key])
+    ) {
+      setDotted(
+        payload,
+        field.key,
+        coerceFieldValue(field, getFieldDefaultFormValue(field)),
+      );
     }
   }
 

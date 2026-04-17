@@ -599,7 +599,7 @@ describe("SdkSectionPage", () => {
     });
   });
 
-  it("omits hidden detailed fields when saving after switching back to the basic view", async () => {
+  it("warns before resetting hidden detailed fields and clears them after confirmation", async () => {
     vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
       buildSettings({
         agent_settings_schema: {
@@ -664,17 +664,89 @@ describe("SdkSectionPage", () => {
     await userEvent.type(endpointInput, "https://api.changed.example.com");
     await userEvent.click(screen.getByTestId("save-button"));
 
+    expect(await screen.findByTestId("confirmation-modal")).toBeInTheDocument();
+    expect(saveSettingsSpy).not.toHaveBeenCalled();
+
+    await userEvent.click(screen.getByTestId("confirm-button"));
+
     await waitFor(() => {
       expect(saveSettingsSpy).toHaveBeenCalledWith({
         agent_settings: {
           llm: {
             endpoint: "https://api.changed.example.com",
+            timeout: 30,
           },
         },
       });
     });
   });
 
+  it("cancels hidden detailed field resets when the shared warning modal is dismissed", async () => {
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      buildSettings({
+        agent_settings_schema: {
+          model_name: "AgentSettings",
+          sections: [
+            {
+              key: "llm",
+              label: "LLM",
+              fields: [
+                {
+                  key: "llm.endpoint",
+                  label: "Endpoint",
+                  section: "llm",
+                  section_label: "LLM",
+                  value_type: "string",
+                  default: "https://api.example.com",
+                  choices: [],
+                  depends_on: [],
+                  prominence: "critical",
+                  secret: false,
+                  required: true,
+                },
+                {
+                  key: "llm.timeout",
+                  label: "Timeout",
+                  section: "llm",
+                  section_label: "LLM",
+                  value_type: "integer",
+                  default: 30,
+                  choices: [],
+                  depends_on: [],
+                  prominence: "major",
+                  secret: false,
+                  required: false,
+                },
+              ],
+            },
+          ],
+        },
+        agent_settings: {
+          llm: {
+            endpoint: "https://api.example.com",
+            timeout: 45,
+          },
+        },
+      }),
+    );
+    const saveSettingsSpy = vi
+      .spyOn(SettingsService, "saveSettings")
+      .mockResolvedValue(true);
+
+    renderSdkSectionPage({ sectionKeys: ["llm"] });
+
+    await userEvent.click(await screen.findByTestId("sdk-section-basic-toggle"));
+    const endpointInput = await screen.findByTestId("sdk-settings-llm.endpoint");
+    await userEvent.clear(endpointInput);
+    await userEvent.type(endpointInput, "https://api.changed.example.com");
+    await userEvent.click(screen.getByTestId("save-button"));
+
+    expect(await screen.findByTestId("confirmation-modal")).toBeInTheDocument();
+    await userEvent.click(screen.getByTestId("cancel-button"));
+
+    expect(screen.queryByTestId("confirmation-modal")).not.toBeInTheDocument();
+    expect(saveSettingsSpy).not.toHaveBeenCalled();
+  });
 
   it("allows saving custom payloads when only external state is dirty", async () => {
     vi.spyOn(SettingsService, "getSettings").mockResolvedValue(buildSettings());
