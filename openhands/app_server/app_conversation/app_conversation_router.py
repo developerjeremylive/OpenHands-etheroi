@@ -16,6 +16,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from openhands.agent_server.models import Success
+from openhands.analytics import get_analytics_service
 from openhands.app_server.app_conversation.app_conversation_info_service import (
     AppConversationInfoService,
 )
@@ -928,6 +929,7 @@ async def export_conversation(
     app_conversation_service: AppConversationService = (
         app_conversation_service_dependency
     ),
+    user_context: UserContext = user_context_dependency,
 ):
     """Download a conversation trajectory as a zip file.
 
@@ -944,6 +946,25 @@ async def export_conversation(
         zip_content = await app_conversation_service.export_conversation(
             conversation_id
         )
+
+        # Analytics: track trajectory download
+        try:
+            analytics = get_analytics_service()
+            user_id = await user_context.get_user_id()
+            if analytics and user_id:
+                user_info = await user_context.get_user_info()
+                consented = (
+                    user_info.user_consents_to_analytics
+                    if user_info and user_info.user_consents_to_analytics is not None
+                    else False
+                )
+                analytics.track_trajectory_downloaded(
+                    distinct_id=user_id,
+                    conversation_id=str(conversation_id),
+                    consented=consented,
+                )
+        except Exception:
+            logger.exception('analytics:trajectory_downloaded:failed')
 
         # Return as a downloadable zip file
         return Response(

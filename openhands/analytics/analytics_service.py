@@ -24,9 +24,14 @@ from openhands.analytics.analytics_constants import (
     CREDIT_LIMIT_REACHED,
     CREDIT_PURCHASED,
     ENTERPRISE_LEAD_FORM_SUBMITTED,
+    ERROR_CAPTURED,
     GIT_PROVIDER_CONNECTED,
+    MCP_CONFIG_UPDATED,
     ONBOARDING_COMPLETED,
     SAAS_SELFHOSTED_INQUIRY,
+    SETTINGS_SAVED,
+    TEAM_MEMBERS_INVITED,
+    TRAJECTORY_DOWNLOADED,
     USER_ACTIVATED,
     USER_LOGGED_IN,
     USER_SIGNED_UP,
@@ -364,6 +369,57 @@ class AnalyticsService:
             consented=consented,
         )
 
+    def track_error_captured(
+        self,
+        distinct_id: str,
+        *,
+        conversation_id: str,
+        error_type: str,
+        error_message: str | None = None,
+        error_source: str,
+        event_id: str | None = None,
+        tool_name: str | None = None,
+        tool_call_id: str | None = None,
+        org_id: str | None = None,
+        session_id: str | None = None,
+        consented: bool = True,
+    ) -> None:
+        """Track 'error captured' event.
+
+        Replaces frontend posthog.captureException() for server-side error tracking.
+        Fired when ConversationErrorEvent, ServerErrorEvent, or AgentErrorEvent
+        is received via webhook.
+
+        Args:
+            distinct_id: User identifier
+            conversation_id: The conversation where the error occurred
+            error_type: Error code/type (e.g., 'MaxIterationsReached', 'ACPPromptError')
+            error_message: Human-readable error detail (truncated to 500 chars)
+            error_source: Origin of error ('conversation', 'server', or 'agent')
+            event_id: Unique event identifier
+            tool_name: For agent errors, the tool that failed
+            tool_call_id: For agent errors, the tool call ID
+            org_id: Organization identifier
+            session_id: PostHog session ID
+            consented: Whether user consented to analytics
+        """
+        self.capture(
+            distinct_id=distinct_id,
+            event=ERROR_CAPTURED,
+            properties={
+                'conversation_id': conversation_id,
+                'error_type': error_type,
+                'error_message': error_message,
+                'error_source': error_source,
+                'event_id': event_id,
+                'tool_name': tool_name,
+                'tool_call_id': tool_call_id,
+            },
+            org_id=org_id,
+            session_id=session_id,
+            consented=consented,
+        )
+
     def track_user_activated(
         self,
         distinct_id: str,
@@ -496,6 +552,112 @@ class AnalyticsService:
                 'company': company,
                 'email': email,
                 'message': message,
+            },
+            org_id=org_id,
+            session_id=session_id,
+            consented=consented,
+        )
+
+    def track_settings_saved(
+        self,
+        distinct_id: str,
+        *,
+        settings_changed: list[str] | None = None,
+        org_id: str | None = None,
+        session_id: str | None = None,
+        consented: bool = True,
+    ) -> None:
+        """Track 'settings saved' event.
+
+        Fired when a user saves their settings.
+        """
+        self.capture(
+            distinct_id=distinct_id,
+            event=SETTINGS_SAVED,
+            properties={
+                'settings_changed': settings_changed,
+            },
+            org_id=org_id,
+            session_id=session_id,
+            consented=consented,
+        )
+
+    def track_mcp_config_updated(
+        self,
+        distinct_id: str,
+        *,
+        has_mcp_config: bool = True,
+        sse_servers_count: int = 0,
+        stdio_servers_count: int = 0,
+        org_id: str | None = None,
+        session_id: str | None = None,
+        consented: bool = True,
+    ) -> None:
+        """Track 'mcp config updated' event.
+
+        Fired when a user updates their MCP server configuration.
+        """
+        self.capture(
+            distinct_id=distinct_id,
+            event=MCP_CONFIG_UPDATED,
+            properties={
+                'has_mcp_config': has_mcp_config,
+                'sse_servers_count': sse_servers_count,
+                'stdio_servers_count': stdio_servers_count,
+            },
+            org_id=org_id,
+            session_id=session_id,
+            consented=consented,
+        )
+
+    def track_trajectory_downloaded(
+        self,
+        distinct_id: str,
+        *,
+        conversation_id: str,
+        org_id: str | None = None,
+        session_id: str | None = None,
+        consented: bool = True,
+    ) -> None:
+        """Track 'trajectory downloaded' event.
+
+        Fired when a user downloads a conversation trajectory.
+        """
+        self.capture(
+            distinct_id=distinct_id,
+            event=TRAJECTORY_DOWNLOADED,
+            properties={
+                'conversation_id': conversation_id,
+            },
+            org_id=org_id,
+            session_id=session_id,
+            consented=consented,
+        )
+
+    def track_team_members_invited(
+        self,
+        distinct_id: str,
+        *,
+        org_id: str,
+        invited_count: int,
+        successful_count: int,
+        failed_count: int,
+        role: str,
+        session_id: str | None = None,
+        consented: bool = True,
+    ) -> None:
+        """Track 'team members invited' event.
+
+        Fired when a user invites team members to their organization.
+        """
+        self.capture(
+            distinct_id=distinct_id,
+            event=TEAM_MEMBERS_INVITED,
+            properties={
+                'invited_count': invited_count,
+                'successful_count': successful_count,
+                'failed_count': failed_count,
+                'role': role,
             },
             org_id=org_id,
             session_id=session_id,

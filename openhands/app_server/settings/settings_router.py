@@ -9,6 +9,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, status
 from fastapi.responses import JSONResponse
 
+from openhands.analytics import get_analytics_service
 from openhands.app_server.utils.dependencies import get_dependencies
 from openhands.core.logger import openhands_logger as logger
 from openhands.integrations.provider import (
@@ -24,6 +25,7 @@ from openhands.server.shared import config
 from openhands.server.user_auth import (
     get_provider_tokens,
     get_secrets_store,
+    get_user_id,
     get_user_settings,
     get_user_settings_store,
 )
@@ -176,6 +178,7 @@ async def load_settings(
 async def store_settings(
     payload: dict[str, Any],
     settings_store: SettingsStore = Depends(get_user_settings_store),
+    user_id: str | None = Depends(get_user_id),
 ) -> JSONResponse:
     """Store user settings.
 
@@ -225,6 +228,48 @@ async def store_settings(
             )
 
         await settings_store.store(settings)
+
+        # Analytics: track settings saved and MCP config updates
+        try:
+            analytics = get_analytics_service()
+            if analytics and user_id:
+                consented = settings.user_consents_to_analytics is True
+
+                # Track settings saved
+                settings_changed = list(payload.keys())
+                analytics.track_settings_saved(
+                    distinct_id=user_id,
+                    settings_changed=settings_changed,
+                    consented=consented,
+                )
+
+                # Track MCP config update if MCP settings changed
+                agent_settings = payload.get('agent_settings', {})
+                if isinstance(agent_settings, dict):
+                    mcp_config = agent_settings.get('mcp_config')
+                    if mcp_config:
+                        mcp_servers = mcp_config.get('mcpServers', {})
+                        # Count SSE vs stdio servers
+                        sse_count = sum(
+                            1
+                            for s in mcp_servers.values()
+                            if isinstance(s, dict) and s.get('url')
+                        )
+                        stdio_count = sum(
+                            1
+                            for s in mcp_servers.values()
+                            if isinstance(s, dict) and s.get('command')
+                        )
+                        analytics.track_mcp_config_updated(
+                            distinct_id=user_id,
+                            has_mcp_config=bool(mcp_servers),
+                            sse_servers_count=sse_count,
+                            stdio_servers_count=stdio_count,
+                            consented=consented,
+                        )
+        except Exception:
+            logger.exception('analytics:settings_saved:failed')
+
         return JSONResponse(
             status_code=status.HTTP_200_OK,
             content={'message': 'Settings stored'},

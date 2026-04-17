@@ -12,7 +12,7 @@ from jwt import InvalidTokenError
 from pydantic import SecretStr
 
 from openhands import tools  # type: ignore[attr-defined]
-from openhands.agent_server.models import ConversationInfo, Success
+from openhands.agent_server.models import ConversationInfo, ServerErrorEvent, Success
 from openhands.analytics import analytics_constants, get_analytics_service
 from openhands.app_server.app_conversation.app_conversation_info_service import (
     AppConversationInfoService,
@@ -41,7 +41,8 @@ from openhands.app_server.user.specifiy_user_context import (
 )
 from openhands.integrations.provider import ProviderType
 from openhands.sdk import ConversationExecutionStatus, Event
-from openhands.sdk.event import ConversationStateUpdateEvent
+from openhands.sdk.event import AgentErrorEvent, ConversationStateUpdateEvent
+from openhands.sdk.event.conversation_error import ConversationErrorEvent
 from openhands.server.types import AppMode
 from openhands.server.user_auth.default_user_auth import DefaultUserAuth
 from openhands.server.user_auth.user_auth import (
@@ -140,6 +141,78 @@ def detect_automation_trigger(
         return ConversationTrigger.AUTOMATION
 
     return None
+
+
+async def _track_error_events(
+    events: list[Event],
+    conversation_id: UUID,
+    app_conversation_info: AppConversationInfo,
+) -> None:
+    """Track error events to analytics (replaces frontend captureException).
+
+    Processes ConversationErrorEvent, ServerErrorEvent, and AgentErrorEvent
+    from the event stream and sends them to PostHog analytics.
+    """
+    analytics = get_analytics_service()
+    if not analytics or not app_conversation_info.created_by_user_id:
+        return
+
+    for event in events:
+        error_data: dict | None = None
+
+        if isinstance(event, ConversationErrorEvent):
+            error_data = {
+                'error_type': event.code,
+                'error_message': event.detail[:500] if event.detail else None,
+                'error_source': 'conversation',
+                'event_id': str(event.id) if event.id else None,
+            }
+        elif isinstance(event, ServerErrorEvent):
+            error_data = {
+                'error_type': event.code,
+                'error_message': event.detail[:500] if event.detail else None,
+                'error_source': 'server',
+                'event_id': str(event.id) if event.id else None,
+            }
+        elif isinstance(event, AgentErrorEvent):
+            error_data = {
+                'error_type': 'AgentError',
+                'error_message': event.error[:500] if event.error else None,
+                'error_source': 'agent',
+                'event_id': str(event.id) if event.id else None,
+                'tool_name': event.tool_name,
+                'tool_call_id': event.tool_call_id,
+            }
+
+        if error_data:
+            try:
+                from storage.user_store import UserStore
+
+                user_obj = await UserStore.get_user_by_id(
+                    app_conversation_info.created_by_user_id
+                )
+                if user_obj:
+                    consented = user_obj.user_consents_to_analytics is True
+                    org_id = (
+                        str(user_obj.current_org_id)
+                        if user_obj.current_org_id
+                        else None
+                    )
+
+                    analytics.track_error_captured(
+                        distinct_id=app_conversation_info.created_by_user_id,
+                        conversation_id=str(conversation_id),
+                        error_type=error_data['error_type'],
+                        error_message=error_data.get('error_message'),
+                        error_source=error_data['error_source'],
+                        event_id=error_data.get('event_id'),
+                        tool_name=error_data.get('tool_name'),
+                        tool_call_id=error_data.get('tool_call_id'),
+                        org_id=org_id,
+                        consented=consented,
+                    )
+            except Exception:
+                _logger.exception('analytics:error_captured:failed')
 
 
 async def valid_sandbox(
@@ -310,6 +383,9 @@ async def on_event(
         await asyncio.gather(
             *[event_service.save_event(conversation_id, event) for event in events]
         )
+
+        # Track error events (replaces frontend captureException)
+        await _track_error_events(events, conversation_id, app_conversation_info)
 
         # Process stats events for V1 conversations
         for event in events:

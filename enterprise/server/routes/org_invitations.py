@@ -22,6 +22,7 @@ from server.utils.rate_limit_utils import check_rate_limit_by_user_id
 from storage.org_store import OrgStore
 from storage.role_store import RoleStore
 
+from openhands.analytics import get_analytics_service
 from openhands.core.logger import openhands_logger as logger
 from openhands.server.user_auth import get_user_id
 
@@ -93,6 +94,28 @@ async def create_invitation(
                 'inviter_id': user_id,
             },
         )
+
+        # Analytics: track team members invited
+        try:
+            analytics = get_analytics_service()
+            if analytics and user_id:
+                from storage.user_store import UserStore
+
+                user_obj = await UserStore.get_user_by_id(user_id)
+                consented = (
+                    user_obj.user_consents_to_analytics is True if user_obj else False
+                )
+                analytics.track_team_members_invited(
+                    distinct_id=user_id,
+                    org_id=str(org_id),
+                    invited_count=len(invitation_data.emails),
+                    successful_count=len(successful),
+                    failed_count=len(failed),
+                    role=invitation_data.role,
+                    consented=consented,
+                )
+        except Exception:
+            logger.exception('analytics:team_members_invited:failed')
 
         successful_responses = [
             await InvitationResponse.from_invitation(inv) for inv in successful
