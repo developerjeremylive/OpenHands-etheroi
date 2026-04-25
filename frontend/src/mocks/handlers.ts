@@ -5,7 +5,11 @@ import { TASK_SUGGESTIONS_HANDLERS } from "#/mocks/task-suggestions-handlers";
 import { SECRETS_HANDLERS } from "#/mocks/secrets-handlers";
 import { ORG_HANDLERS } from "#/mocks/org-handlers";
 import { GIT_REPOSITORY_HANDLERS } from "#/mocks/git-repository-handlers";
-import { SETTINGS_HANDLERS } from "#/mocks/settings-handlers";
+import {
+  SETTINGS_HANDLERS,
+  MOCK_DEFAULT_USER_SETTINGS,
+  resetTestHandlersMockSettings,
+} from "#/mocks/settings-handlers";
 import { CONVERSATION_HANDLERS } from "#/mocks/conversation-handlers";
 import { AUTH_HANDLERS } from "#/mocks/auth-handlers";
 import { FEEDBACK_HANDLERS } from "#/mocks/feedback-handlers";
@@ -27,3 +31,5 @@ export const handlers = [
   ...ANALYTICS_HANDLERS,
   ...EXTRA_HANDLERS,
 ];
+
+export { MOCK_DEFAULT_USER_SETTINGS, resetTestHandlersMockSettings };
