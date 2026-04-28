@@ -3,8 +3,8 @@
 Stores the agent type ('llm' or 'acp') for each conversation so the
 correct agent-server endpoint can be used when routing requests.
 
-Revision ID: 109
-Revises: 108
+Revision ID: 110
+Revises: 109
 Create Date: 2026-04-28
 """
 
@@ -14,8 +14,8 @@ import sqlalchemy as sa
 from alembic import op
 
 # revision identifiers, used by Alembic.
-revision: str = '109'
-down_revision: Union[str, None] = '108'
+revision: str = '110'
+down_revision: Union[str, None] = '109'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
