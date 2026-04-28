@@ -14,10 +14,8 @@ from unittest.mock import MagicMock
 import pytest
 from pydantic import ValidationError
 from server.routes.org_models import (
-    MeResponse,
     OrgAppSettingsResponse,
     OrgAppSettingsUpdate,
-    OrgMemberResponse,
     OrgMemberUpdate,
     OrgResponse,
     OrgUpdate,
