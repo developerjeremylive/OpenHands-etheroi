@@ -22,9 +22,9 @@ def mock_github_dependencies():
     # Store original modules if they exist
     original_modules = {}
     modules_to_mock = [
-        "integrations.github.data_collector",
-        "integrations.github.github_manager",
-        "server.routes.integration.github",
+        'integrations.github.data_collector',
+        'integrations.github.github_manager',
+        'server.routes.integration.github',
     ]
     for mod in modules_to_mock:
         if mod in sys.modules:
@@ -37,13 +37,13 @@ def mock_github_dependencies():
     mock_data_collector_module.GitHubDataCollector.return_value = (
         mock_data_collector_instance
     )
-    sys.modules["integrations.github.data_collector"] = mock_data_collector_module
+    sys.modules['integrations.github.data_collector'] = mock_data_collector_module
 
     # Create mock GithubManager
     mock_github_manager_module = MagicMock()
     mock_github_manager_instance = MagicMock()
     mock_github_manager_module.GithubManager.return_value = mock_github_manager_instance
-    sys.modules["integrations.github.github_manager"] = mock_github_manager_module
+    sys.modules['integrations.github.github_manager'] = mock_github_manager_module
 
     yield
 
@@ -64,16 +64,16 @@ class TestGitHubTokenResponse:
         """GitHubTokenResponse should accept a valid access_token."""
         from server.routes.integration.github import GitHubTokenResponse
 
-        response = GitHubTokenResponse(access_token="ghp_test_token_12345")
-        assert response.access_token == "ghp_test_token_12345"
+        response = GitHubTokenResponse(access_token='ghp_test_token_12345')
+        assert response.access_token == 'ghp_test_token_12345'
 
     def test_github_token_response_model_dump(self):
         """GitHubTokenResponse model_dump should include access_token."""
         from server.routes.integration.github import GitHubTokenResponse
 
-        response = GitHubTokenResponse(access_token="ghp_test_token_12345")
+        response = GitHubTokenResponse(access_token='ghp_test_token_12345')
         data = response.model_dump()
-        assert data["access_token"] == "ghp_test_token_12345"
+        assert data['access_token'] == 'ghp_test_token_12345'
 
 
 class TestGetGitHubToken:
@@ -95,7 +95,7 @@ class TestGetGitHubToken:
         mock_auth.get_provider_tokens = AsyncMock(
             return_value={
                 ProviderType.GITHUB: ProviderToken(
-                    token=SecretStr("ghp_test_token_12345")
+                    token=SecretStr('ghp_test_token_12345')
                 )
             }
         )
@@ -110,13 +110,13 @@ class TestGetGitHubToken:
         )
 
         with patch(
-            "server.routes.integration.github.get_user_auth",
+            'server.routes.integration.github.get_user_auth',
             return_value=mock_saas_user_auth,
         ):
             result = await get_github_token(mock_request)
 
         assert isinstance(result, GitHubTokenResponse)
-        assert result.access_token == "ghp_test_token_12345"
+        assert result.access_token == 'ghp_test_token_12345'
         mock_saas_user_auth.get_provider_tokens.assert_called_once()
 
     @pytest.mark.asyncio
@@ -130,7 +130,7 @@ class TestGetGitHubToken:
 
         with (
             patch(
-                "server.routes.integration.github.get_user_auth",
+                'server.routes.integration.github.get_user_auth',
                 return_value=mock_auth,
             ),
             pytest.raises(HTTPException) as exc_info,
@@ -138,7 +138,7 @@ class TestGetGitHubToken:
             await get_github_token(mock_request)
 
         assert exc_info.value.status_code == 404
-        assert "No provider tokens" in exc_info.value.detail
+        assert 'No provider tokens' in exc_info.value.detail
 
     @pytest.mark.asyncio
     async def test_get_github_token_no_github_token(self, mock_request):
@@ -153,14 +153,14 @@ class TestGetGitHubToken:
         mock_auth.get_provider_tokens = AsyncMock(
             return_value={
                 ProviderType.GITLAB: ProviderToken(
-                    token=SecretStr("glpat_test_token_12345")
+                    token=SecretStr('glpat_test_token_12345')
                 )
             }
         )
 
         with (
             patch(
-                "server.routes.integration.github.get_user_auth",
+                'server.routes.integration.github.get_user_auth',
                 return_value=mock_auth,
             ),
             pytest.raises(HTTPException) as exc_info,
@@ -168,7 +168,7 @@ class TestGetGitHubToken:
             await get_github_token(mock_request)
 
         assert exc_info.value.status_code == 404
-        assert "No GitHub token" in exc_info.value.detail
+        assert 'No GitHub token' in exc_info.value.detail
 
     @pytest.mark.asyncio
     async def test_get_github_token_empty_provider_tokens(self, mock_request):
@@ -181,7 +181,7 @@ class TestGetGitHubToken:
 
         with (
             patch(
-                "server.routes.integration.github.get_user_auth",
+                'server.routes.integration.github.get_user_auth',
                 return_value=mock_auth,
             ),
             pytest.raises(HTTPException) as exc_info,
@@ -190,4 +190,4 @@ class TestGetGitHubToken:
 
         assert exc_info.value.status_code == 404
         # Empty dict is falsy, so it triggers the "no provider tokens" error
-        assert "No provider tokens" in exc_info.value.detail
+        assert 'No provider tokens' in exc_info.value.detail
