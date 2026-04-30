@@ -1,18 +1,14 @@
 import importlib
 import warnings
-from unittest.mock import patch
 
 import pytest
 from fastmcp.mcp_config import MCPConfig
 from pydantic import SecretStr
 
 import openhands.app_server.settings.settings_models as settings_module
+from openhands.app_server.settings.llm_profiles import ProfileNotFoundError
 from openhands.app_server.settings.settings_models import Settings
 from openhands.app_server.settings.settings_router import LITE_LLM_API_URL
-from openhands.core.config.llm_config import LLMConfig
-from openhands.core.config.openhands_config import OpenHandsConfig
-from openhands.core.config.sandbox_config import SandboxConfig
-from openhands.core.config.security_config import SecurityConfig
 from openhands.sdk.llm import LLM
 from openhands.sdk.settings import (
     AGENT_SETTINGS_SCHEMA_VERSION,
@@ -20,68 +16,6 @@ from openhands.sdk.settings import (
     ConversationSettings,
 )
 from openhands.sdk.settings.model import CondenserSettings, VerificationSettings
-from openhands.storage.data_models.llm_profiles import ProfileNotFoundError
-
-
-def test_settings_from_config():
-    mock_app_config = OpenHandsConfig(
-        default_agent='test-agent',
-        max_iterations=100,
-        security=SecurityConfig(
-            security_analyzer='llm',
-            confirmation_mode=True,
-        ),
-        llms={
-            'llm': LLMConfig(
-                model='test-model',
-                api_key=SecretStr('test-key'),
-                base_url='https://test.example.com',
-            )
-        },
-        sandbox=SandboxConfig(remote_runtime_resource_factor=2),
-    )
-
-    with patch(
-        'openhands.app_server.settings.settings_models.load_openhands_config',
-        return_value=mock_app_config,
-    ):
-        settings = Settings.from_config()
-
-        assert settings is not None
-        assert settings.language == 'en'
-        assert settings.agent_settings.agent == 'test-agent'
-        assert settings.conversation_settings.max_iterations == 100
-        assert settings.conversation_settings.security_analyzer == 'llm'
-        assert settings.conversation_settings.confirmation_mode is True
-        assert settings.agent_settings.llm.model == 'test-model'
-        assert settings.agent_settings.llm.api_key.get_secret_value() == 'test-key'
-        assert settings.agent_settings.llm.base_url == 'https://test.example.com'
-        assert settings.remote_runtime_resource_factor == 2
-        assert not settings.secrets_store.provider_tokens
-
-
-def test_settings_from_config_no_api_key():
-    mock_app_config = OpenHandsConfig(
-        default_agent='test-agent',
-        max_iterations=100,
-        security=SecurityConfig(
-            security_analyzer='llm',
-            confirmation_mode=True,
-        ),
-        llms={
-            'llm': LLMConfig(
-                model='test-model', api_key=None, base_url='https://test.example.com'
-            )
-        },
-        sandbox=SandboxConfig(remote_runtime_resource_factor=2),
-    )
-
-    with patch(
-        'openhands.app_server.settings.settings_models.load_openhands_config',
-        return_value=mock_app_config,
-    ):
-        settings = Settings.from_config()
-        assert settings is None
 
 
 def test_settings_handles_sensitive_data():

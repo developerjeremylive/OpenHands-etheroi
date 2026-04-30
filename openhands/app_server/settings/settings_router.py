@@ -12,44 +12,44 @@ from fastapi import APIRouter, Body, Depends, HTTPException, Path, status
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
+from openhands.app_server.integrations.provider import (
+    PROVIDER_TOKEN_TYPE,
+    ProviderType,
+)
 from openhands.app_server.secrets.secrets_models import Secrets
 from openhands.app_server.secrets.secrets_store import SecretsStore
+from openhands.app_server.settings.llm_profiles import (
+    ProfileAlreadyExistsError,
+    ProfileLimitExceededError,
+    ProfileNotFoundError,
+    StrictLLM,
+)
 from openhands.app_server.settings.settings_models import (
     GETSettingsModel,
     Settings,
 )
 from openhands.app_server.settings.settings_store import SettingsStore
-from openhands.app_server.utils.dependencies import get_dependencies
-from openhands.core.logger import openhands_logger as logger
-from openhands.integrations.provider import (
-    PROVIDER_TOKEN_TYPE,
-    ProviderType,
-)
-from openhands.sdk.llm import LLM
-from openhands.sdk.settings import ConversationSettings
-from openhands.server.shared import config
-from openhands.server.user_auth import (
+from openhands.app_server.user_auth import (
     get_provider_tokens,
     get_secrets_store,
     get_user_id,
     get_user_settings,
     get_user_settings_store,
 )
-from openhands.storage.data_models.llm_profiles import (
-    ProfileAlreadyExistsError,
-    ProfileLimitExceededError,
-    ProfileNotFoundError,
-    StrictLLM,
-)
-from openhands.utils.llm import (
+from openhands.app_server.utils.dependencies import get_dependencies
+from openhands.app_server.utils.llm import (
     get_provider_api_base,
     is_openhands_model,
     resolve_llm_base_url,
 )
-from openhands.utils.sdk_settings_compat import (
+from openhands.app_server.utils.logger import openhands_logger as logger
+from openhands.app_server.utils.sdk_settings_compat import (
     LLMAgentSettings,
     export_agent_settings_schema,
 )
+from openhands.sdk.llm import LLM
+from openhands.sdk.settings import ConversationSettings
+from openhands.server.shared import config
 
 LITE_LLM_API_URL = os.environ.get(
     'LITE_LLM_API_URL', 'https://llm-proxy.app.all-hands.dev'
@@ -67,7 +67,7 @@ def _post_merge_llm_fixups(settings: Settings) -> None:
     """Apply LLM-specific fixups after merging settings.
 
     Delegates the empty-string → cleared and provider-default inference
-    rules to :func:`openhands.utils.llm.resolve_llm_base_url` so the
+    rules to :func:`openhands.app_server.utils.llm.resolve_llm_base_url` so the
     personal-save and enterprise org-defaults paths stay in lockstep.
     """
     if not isinstance(settings.agent_settings, LLMAgentSettings):
@@ -236,12 +236,6 @@ async def store_settings(
                 )
             if settings.disabled_skills is None:
                 settings.disabled_skills = existing_settings.disabled_skills
-
-        # Update sandbox config with new settings
-        if settings.remote_runtime_resource_factor is not None:
-            config.sandbox.remote_runtime_resource_factor = (
-                settings.remote_runtime_resource_factor
-            )
 
         # Update git configuration with new settings
         git_config_updated = False
