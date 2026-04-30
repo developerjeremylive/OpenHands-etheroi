@@ -15,7 +15,6 @@ import {
   displaySuccessToast,
 } from "#/utils/custom-toast-handlers";
 import { retrieveAxiosErrorMessage } from "#/utils/retrieve-axios-error-message";
-import { parseAcpEnv, formatAcpEnv } from "#/utils/acp-env";
 import { ENABLE_ACP } from "#/utils/feature-flags";
 
 export const handle = { hideTitle: true };
@@ -23,8 +22,6 @@ export const handle = { hideTitle: true };
 type AgentType = "openhands" | "acp";
 
 const COMMAND_PLACEHOLDER = "npx -y @agentclientprotocol/claude-agent-acp";
-const ENV_PLACEHOLDER =
-  "# one KEY=value per line, blanks and # ignored\nANTHROPIC_API_KEY=sk-...\n";
 
 function tokenizeCommand(value: string): string[] {
   return value.split(/\s+/).filter(Boolean);
@@ -39,7 +36,6 @@ function AgentSettingsScreen() {
 
   const [agentType, setAgentType] = useState<AgentType>("openhands");
   const [commandText, setCommandText] = useState("");
-  const [envText, setEnvText] = useState("");
   const [acpModel, setAcpModel] = useState("");
   const [isDirty, setIsDirty] = useState(false);
 
@@ -61,19 +57,11 @@ function AgentSettingsScreen() {
       ];
       setCommandText(tokens.join(" "));
 
-      const acpEnv = settings.agent_settings?.acp_env;
-      const envObj =
-        acpEnv != null && typeof acpEnv === "object" && !Array.isArray(acpEnv)
-          ? (acpEnv as Record<string, string>)
-          : {};
-      setEnvText(formatAcpEnv(envObj));
-
       const savedModel = settings.agent_settings?.acp_model;
       setAcpModel(typeof savedModel === "string" ? savedModel : "");
     } else {
       setAgentType("openhands");
       setCommandText("");
-      setEnvText("");
       setAcpModel("");
     }
     setIsDirty(false);
@@ -101,7 +89,6 @@ function AgentSettingsScreen() {
         acp_server: "custom",
         acp_command: commandTokens,
         acp_args: [],
-        acp_env: parseAcpEnv(envText),
         acp_model: acpModel.trim() || null,
       };
     } else {
@@ -177,25 +164,6 @@ function AgentSettingsScreen() {
             />
             <Typography.Text className="text-xs text-[#717888]">
               {t(I18nKey.SETTINGS$AGENT_COMMAND_HINT)}
-            </Typography.Text>
-          </div>
-
-          <div className="flex flex-col gap-2.5">
-            <Typography.Text className="text-sm">
-              {t(I18nKey.SETTINGS$MCP_ENVIRONMENT_VARIABLES)}
-            </Typography.Text>
-            <textarea
-              data-testid="agent-env-input"
-              className="bg-tertiary border border-[#717888] rounded-sm p-2 text-sm font-mono text-white placeholder:italic placeholder:text-[#717888] min-h-[120px] resize-y focus:outline-none focus:border-white"
-              value={envText}
-              placeholder={ENV_PLACEHOLDER}
-              onChange={(e) => {
-                setEnvText(e.target.value);
-                setIsDirty(true);
-              }}
-            />
-            <Typography.Text className="text-xs text-[#717888]">
-              {t(I18nKey.SETTINGS$AGENT_ENV_HINT)}
             </Typography.Text>
           </div>
 

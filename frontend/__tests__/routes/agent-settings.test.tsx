@@ -81,9 +81,6 @@ describe("AgentSettingsScreen — minimal generic ACP UX", () => {
       ).toBe("npx -y @agentclientprotocol/claude-agent-acp");
     });
     expect(
-      (screen.getByTestId("agent-env-input") as HTMLTextAreaElement).value,
-    ).toBe("ANTHROPIC_API_KEY=sk-test");
-    expect(
       (screen.getByTestId("agent-model-input") as HTMLInputElement).value,
     ).toBe("claude-opus-4");
   });
@@ -129,7 +126,7 @@ describe("AgentSettingsScreen — minimal generic ACP UX", () => {
 
     expect(saveSpy.mock.calls[0][0]).toMatchObject({
       agent_settings_diff: {
-        agent_kind: "llm",
+        agent_kind: "openhands",
         acp_command: null,
         acp_args: null,
         acp_env: null,
