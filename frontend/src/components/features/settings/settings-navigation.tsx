@@ -85,6 +85,7 @@ export function SettingsNavigation({
                 item={renderedItem.item}
                 onClick={onCloseMobileMenu}
                 disabled={renderedItem.disabled}
+                disabledReason={renderedItem.disabledReason}
               />
             );
           })}

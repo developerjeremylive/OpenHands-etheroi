@@ -16,18 +16,28 @@ import { I18nKey } from "#/i18n/declaration";
 
 // Rendered navigation item types
 export type SettingsNavRenderedItem =
-  | { type: "item"; item: SettingsNavItem; disabled?: boolean }
+  | {
+      type: "item";
+      item: SettingsNavItem;
+      disabled?: boolean;
+      disabledReason?: string;
+    }
   | { type: "header"; text: I18nKey }
   | { type: "divider" };
 
-// Items disabled (visible but greyed-out) when an ACP agent is active.
-// Their settings are managed by the ACP subprocess itself.
-// "/settings" is the personal LLM index route — see routes.ts.
+// "/settings" is the LLM settings index route (see routes.ts).
+// Condenser and MCP are managed by the ACP server itself.
 const ACP_DISABLED_PATHS = new Set<string>([
   "/settings",
   "/settings/condenser",
   "/settings/mcp",
 ]);
+
+const ACP_SERVER_NAMES: Record<string, string> = {
+  "claude-code": "Claude Code",
+  codex: "Codex",
+  "gemini-cli": "Gemini CLI",
+};
 
 // Section header text mapping
 const SECTION_HEADERS: Partial<Record<SettingsNavSection, I18nKey>> = {
@@ -60,6 +70,11 @@ export function useSettingsNavItems(): SettingsNavRenderedItem[] {
   const isAdminOrOwner = userRole === "admin" || userRole === "owner";
   const isAcpEnabled = !!featureFlags?.enable_acp;
   const isAcpAgent = settings?.agent_settings?.agent_kind === "acp";
+  const acpServerName = isAcpAgent
+    ? (ACP_SERVER_NAMES[
+        (settings?.agent_settings?.acp_server as string) ?? ""
+      ] ?? "ACP Agent")
+    : null;
 
   let items = isSaasMode ? [...SAAS_NAV_ITEMS] : [...OSS_NAV_ITEMS];
 
@@ -106,11 +121,17 @@ export function useSettingsNavItems(): SettingsNavRenderedItem[] {
 
   const buildRenderedItem = (
     item: SettingsNavItem,
-  ): SettingsNavRenderedItem => ({
-    type: "item",
-    item,
-    disabled: isAcpAgent && ACP_DISABLED_PATHS.has(item.to),
-  });
+  ): SettingsNavRenderedItem => {
+    if (isAcpAgent && ACP_DISABLED_PATHS.has(item.to)) {
+      return {
+        type: "item",
+        item,
+        disabled: true,
+        disabledReason: acpServerName ?? undefined,
+      };
+    }
+    return { type: "item", item };
+  };
 
   // For OSS mode or non-SaaS, return flat list without sections
   if (!isSaasMode) {

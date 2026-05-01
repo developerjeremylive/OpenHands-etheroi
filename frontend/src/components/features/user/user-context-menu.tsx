@@ -136,6 +136,7 @@ export function UserContextMenu({
                   item={renderedItem.item}
                   onClick={onClose}
                   disabled={renderedItem.disabled}
+                  disabledReason={renderedItem.disabledReason}
                 />
               );
             })}

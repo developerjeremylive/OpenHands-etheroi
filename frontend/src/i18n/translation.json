@@ -24225,20 +24225,20 @@
     "uk": "Optional. Passed through to the ACP agent as its model override."
   },
   "SETTINGS$AGENT_DISABLED_TOOLTIP": {
-    "en": "Managed by the ACP agent and not configurable while ACP is active.",
-    "ja": "Managed by the ACP agent and not configurable while ACP is active.",
-    "zh-CN": "Managed by the ACP agent and not configurable while ACP is active.",
-    "zh-TW": "Managed by the ACP agent and not configurable while ACP is active.",
-    "ko-KR": "Managed by the ACP agent and not configurable while ACP is active.",
-    "no": "Managed by the ACP agent and not configurable while ACP is active.",
-    "ar": "Managed by the ACP agent and not configurable while ACP is active.",
-    "de": "Managed by the ACP agent and not configurable while ACP is active.",
-    "fr": "Managed by the ACP agent and not configurable while ACP is active.",
-    "it": "Managed by the ACP agent and not configurable while ACP is active.",
-    "pt": "Managed by the ACP agent and not configurable while ACP is active.",
-    "es": "Managed by the ACP agent and not configurable while ACP is active.",
-    "ca": "Managed by the ACP agent and not configurable while ACP is active.",
-    "tr": "Managed by the ACP agent and not configurable while ACP is active.",
-    "uk": "Managed by the ACP agent and not configurable while ACP is active."
+    "en": "This setting is disabled when using {{agentName}}",
+    "ja": "この設定は{{agentName}}使用時に無効になります",
+    "zh-CN": "使用{{agentName}}时此设置已禁用",
+    "zh-TW": "使用{{agentName}}時此設定已停用",
+    "ko-KR": "{{agentName}} 사용 시 이 설정은 비활성화됩니다",
+    "no": "Denne innstillingen er deaktivert når du bruker {{agentName}}",
+    "ar": "هذا الإعداد معطل عند استخدام {{agentName}}",
+    "de": "Diese Einstellung ist bei Verwendung von {{agentName}} deaktiviert",
+    "fr": "Ce paramètre est désactivé lors de l'utilisation de {{agentName}}",
+    "it": "Questa impostazione è disabilitata quando si usa {{agentName}}",
+    "pt": "Esta configuração está desativada ao usar {{agentName}}",
+    "es": "Esta configuración está desactivada cuando se usa {{agentName}}",
+    "ca": "Aquesta configuració està desactivada quan s'utilitza {{agentName}}",
+    "tr": "{{agentName}} kullanırken bu ayar devre dışı bırakılır",
+    "uk": "Це налаштування вимкнено при використанні {{agentName}}"
   }
 }
