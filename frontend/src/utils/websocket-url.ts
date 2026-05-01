@@ -76,24 +76,6 @@ export function buildHttpBaseUrl(
 }
 
 /**
- * Builds a conversation-scoped URL by appending a sub-path to the conversation URL.
- *
- * conversationUrl already encodes the correct agent-server path for both LLM
- * (/api/conversations/{id}) and ACP (/api/acp/conversations/{id}).  Using it
- * as the base avoids hard-coding "/api/conversations/" which breaks ACP.
- *
- * @param conversationUrl e.g. "http://localhost:8000/api/acp/conversations/{id}"
- * @param subPath e.g. "/pause" or "/events/count"
- */
-export function buildConversationScopedUrl(
-  conversationUrl: string | null | undefined,
-  subPath: string,
-): string | null {
-  if (!conversationUrl) return null;
-  return `${conversationUrl}${subPath}`;
-}
-
-/**
  * Builds the WebSocket URL for V1 conversations (without query params)
  * @param conversationId The conversation ID
  * @param conversationUrl The conversation URL containing host/port (e.g., "http://localhost:3000/api/conversations/123")
