@@ -40,23 +40,23 @@ if TYPE_CHECKING:
 # We use the get_dependencies method here to signal to the OpenAPI docs that this endpoint
 # is protected. The actual protection is provided by SetAuthCookieMiddleware
 router = APIRouter(
-    prefix='/git',
-    tags=['Git'],
+    prefix="/git",
+    tags=["Git"],
     dependencies=get_dependencies(),
 )
 user_context_dependency = depends_user_context()
 
 
-@router.get('/installations/search')
+@router.get("/installations/search")
 async def search_user_installations(
     provider: ProviderType,
     page_id: Annotated[
         str | None,
-        Query(title='Optional next_page_id from the previously returned page'),
+        Query(title="Optional next_page_id from the previously returned page"),
     ] = None,
     limit: Annotated[
         int,
-        Query(title='The max number of results in the page', gt=0, le=100),
+        Query(title="The max number of results in the page", gt=0, le=100),
     ] = 100,
     user_context: UserContext = user_context_dependency,
 ) -> InstallationPage:
@@ -100,30 +100,30 @@ async def search_user_installations(
     return InstallationPage(items=items, next_page_id=next_page_id)
 
 
-@router.get('/repositories/search')
+@router.get("/repositories/search")
 async def search_repositories(
     provider: ProviderType,
     query: Annotated[
         str | None,
         Query(
-            title='Search query for finding repositories. If not provided, returns user repositories.'
+            title="Search query for finding repositories. If not provided, returns user repositories."
         ),
     ] = None,
     installation_id: Annotated[
         str | None,
-        Query(title='Filter by installation/app ID'),
+        Query(title="Filter by installation/app ID"),
     ] = None,
     page_id: Annotated[
         str | None,
-        Query(title='Optional next_page_id from the previously returned page'),
+        Query(title="Optional next_page_id from the previously returned page"),
     ] = None,
     limit: Annotated[
         int,
-        Query(title='The max number of results in the page', gt=0, le=100),
+        Query(title="The max number of results in the page", gt=0, le=100),
     ] = 100,
     sort_order: Annotated[
         SortOrder | None,
-        Query(title='Sort order for search results (e.g., stars-desc, forks-asc)'),
+        Query(title="Sort order for search results (e.g., stars-desc, forks-asc)"),
     ] = None,
     user_context: UserContext = user_context_dependency,
 ) -> RepositoryPage:
@@ -157,10 +157,10 @@ async def search_repositories(
     if query:
         # Parse sort_order into sort and order components (if provided)
         if sort_order:
-            search_sort, order = sort_order.value.rsplit('-', 1)
+            search_sort, order = sort_order.value.rsplit("-", 1)
         else:
-            search_sort = 'stars'
-            order = 'desc'
+            search_sort = "stars"
+            order = "desc"
 
         repos: list[Repository] = await client.search_repositories(
             selected_provider=provider,
@@ -178,11 +178,11 @@ async def search_repositories(
             # method
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail='sort_order is not supported when listing user repositories. It will be supported after API refactoring.',
+                detail="sort_order is not supported when listing user repositories. It will be supported after API refactoring.",
             )
         # TODO: The underlying API needs refactoring.
         repos = await client.get_repositories(
-            sort='pushed',
+            sort="pushed",
             app_mode=get_global_config().app_mode,
             selected_provider=provider,
             page=page,
@@ -197,12 +197,13 @@ async def search_repositories(
 
     return RepositoryPage(items=repos, next_page_id=next_page_id)
 
+
 async def get_provider_tokens_from_user_context(user_context):
     provider_tokens = await user_context.get_provider_tokens()
     if not provider_tokens:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail='Git provider token required (such as GitHub).',
+            detail="Git provider token required (such as GitHub).",
         )
 
     user_id = await user_context.get_user_id()
@@ -216,24 +217,24 @@ async def get_provider_tokens_from_user_context(user_context):
     return client
 
 
-@router.get('/branches/search')
+@router.get("/branches/search")
 async def search_branches(
     provider: ProviderType,
     repository: Annotated[
         str,
-        Query(title='Repository name in format owner/repo'),
+        Query(title="Repository name in format owner/repo"),
     ],
     query: Annotated[
         str,
-        Query(title='Branch name search query'),
+        Query(title="Branch name search query"),
     ],
     page_id: Annotated[
         str | None,
-        Query(title='Optional next_page_id from the previously returned page'),
+        Query(title="Optional next_page_id from the previously returned page"),
     ] = None,
     limit: Annotated[
         int,
-        Query(title='The max number of results in the page', gt=0, le=100),
+        Query(title="The max number of results in the page", gt=0, le=100),
     ] = 30,
     user_context: UserContext = user_context_dependency,
 ) -> BranchPage:
@@ -269,7 +270,7 @@ async def search_branches(
             # get_branches - those should be merged into a single paginated method
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail='Pagination not yet supported for branch search queries. Use empty query to list all branches with pagination.',
+                detail="Pagination not yet supported for branch search queries. Use empty query to list all branches with pagination.",
             )
         # Get search results - we'll handle pagination ourselves
         branches: list[Branch] = await client.search_branches(
@@ -295,15 +296,15 @@ async def search_branches(
     return BranchPage(items=branches, next_page_id=next_page_id)
 
 
-@router.get('/suggested-tasks/search')
+@router.get("/suggested-tasks/search")
 async def search_suggested_tasks(
     page_id: Annotated[
         str | None,
-        Query(title='Optional next_page_id from the previously returned page'),
+        Query(title="Optional next_page_id from the previously returned page"),
     ] = None,
     limit: Annotated[
         int,
-        Query(title='The max number of results in the page', gt=0, le=100),
+        Query(title="The max number of results in the page", gt=0, le=100),
     ] = 30,
     user_context: UserContext = user_context_dependency,
 ) -> SuggestedTaskPage:
@@ -350,16 +351,16 @@ async def search_suggested_tasks(
     return SuggestedTaskPage(items=paginated_tasks, next_page_id=next_page_id)
 
 
-@router.get('/repositories/onboarding-files')
+@router.get("/repositories/onboarding-files")
 async def check_repository_onboarding_files(
     provider: ProviderType,
     repository: Annotated[
         str,
-        Query(title='Repository name in format owner/repo'),
+        Query(title="Repository name in format owner/repo"),
     ],
     branch: Annotated[
         str | None,
-        Query(title='Branch name to check (defaults to repository default branch)'),
+        Query(title="Branch name to check (defaults to repository default branch)"),
     ] = None,
     user_context: UserContext = user_context_dependency,
 ) -> RepositoryOnboardingFilesResponse:
@@ -373,10 +374,10 @@ async def check_repository_onboarding_files(
 
     # Check for AGENTS.md and REPO.md files
     has_agents_md = await client.check_repository_file_exists(
-        repository, 'AGENTS.md', provider, branch
+        repository, "AGENTS.md", provider, branch
     )
     has_repo_md = await client.check_repository_file_exists(
-        repository, 'REPO.md', provider, branch
+        repository, "REPO.md", provider, branch
     )
 
     return RepositoryOnboardingFilesResponse(
