@@ -109,10 +109,10 @@ class TestProcessSandboxService:
         assert result is False
 
     @patch('psutil.Process')
-    def test_get_process_status_running(
+    def test_get_process_status_running_process_is_starting_until_health_check(
         self, mock_process_class, process_sandbox_service
     ):
-        """Test getting process status for running process."""
+        """Process liveness alone does not make the sandbox RUNNING."""
         mock_process = MagicMock()
         mock_process.is_running.return_value = True
         mock_process.status.return_value = psutil.STATUS_RUNNING
@@ -129,7 +129,7 @@ class TestProcessSandboxService:
         )
 
         status = process_sandbox_service._get_process_status(process_info)
-        assert status == SandboxStatus.RUNNING
+        assert status == SandboxStatus.STARTING
 
     @patch('psutil.Process')
     def test_get_process_status_missing(
@@ -199,7 +199,7 @@ class TestProcessSandboxService:
             patch.object(
                 process_sandbox_service,
                 '_get_process_status',
-                return_value=SandboxStatus.RUNNING,
+                return_value=SandboxStatus.STARTING,
             ),
         ):
             mock_process = MagicMock()
@@ -244,10 +244,10 @@ class TestProcessSandboxService:
         assert status == SandboxStatus.PAUSED
 
     @patch('psutil.Process')
-    def test_get_process_status_sleeping_process_is_running(
+    def test_get_process_status_sleeping_process_is_starting_until_health_check(
         self, mock_process_class, process_sandbox_service
     ):
-        """Sleeping is a normal idle state for a ready agent server process."""
+        """Sleeping is a normal process state, but readiness requires HTTP health."""
         mock_process = MagicMock()
         mock_process.is_running.return_value = True
         mock_process.status.return_value = psutil.STATUS_SLEEPING
@@ -264,7 +264,7 @@ class TestProcessSandboxService:
         )
 
         status = process_sandbox_service._get_process_status(process_info)
-        assert status == SandboxStatus.RUNNING
+        assert status == SandboxStatus.STARTING
 
     @pytest.mark.asyncio
     @patch('psutil.Process')
@@ -301,6 +301,39 @@ class TestProcessSandboxService:
         assert sandbox_info.exposed_urls[0].name == AGENT_SERVER
         assert sandbox_info.exposed_urls[0].url == 'http://localhost:9000'
 
+    @pytest.mark.asyncio
+    @patch('psutil.Process')
+    async def test_process_to_sandbox_info_live_process_without_health_stays_starting(
+        self, mock_process_class, process_sandbox_service
+    ):
+        """A live process is STARTING, not RUNNING, until health succeeds."""
+        mock_process = MagicMock()
+        mock_process.is_running.return_value = True
+        mock_process.status.return_value = psutil.STATUS_SLEEPING
+        mock_process_class.return_value = mock_process
+
+        mock_response = MagicMock()
+        mock_response.status_code = 500
+        process_sandbox_service.httpx_client.get.return_value = mock_response
+
+        process_info = ProcessInfo(
+            pid=1234,
+            port=9000,
+            user_id='test-user-id',
+            working_dir='/tmp/test',
+            session_api_key='test-key',
+            created_at=datetime.now(),
+            sandbox_spec_id='test-spec',
+        )
+
+        sandbox_info = await process_sandbox_service._process_to_sandbox_info(
+            'test-sandbox', process_info
+        )
+
+        assert sandbox_info.status == SandboxStatus.STARTING
+        assert sandbox_info.session_api_key is None
+        assert sandbox_info.exposed_urls is None
+
     @patch('psutil.Process')
     def test_get_process_status_access_denied(
         self, mock_process_class, process_sandbox_service
@@ -323,14 +356,12 @@ class TestProcessSandboxService:
 
     @pytest.mark.asyncio
     async def test_process_to_sandbox_info_error_status(self, process_sandbox_service):
-        """Test converting process info to sandbox info when server is not responding."""
-        # Mock a process that's running but server is not responding
+        """Test converting stale, unresponsive process info to error status."""
         with patch.object(
             process_sandbox_service,
             '_get_process_status',
-            return_value=SandboxStatus.RUNNING,
+            return_value=SandboxStatus.STARTING,
         ):
-            # Mock httpx client to return error response
             mock_response = MagicMock()
             mock_response.status_code = 500
             process_sandbox_service.httpx_client.get.return_value = mock_response
@@ -341,7 +372,11 @@ class TestProcessSandboxService:
                 user_id='test-user-id',
                 working_dir='/tmp/test',
                 session_api_key='test-key',
-                created_at=datetime.now(),
+                created_at=datetime.fromtimestamp(
+                    datetime.now().timestamp()
+                    - process_sandbox_service.startup_grace_seconds
+                    - 1
+                ),
                 sandbox_spec_id='test-spec',
             )
 
@@ -355,14 +390,12 @@ class TestProcessSandboxService:
 
     @pytest.mark.asyncio
     async def test_process_to_sandbox_info_exception(self, process_sandbox_service):
-        """Test converting process info to sandbox info when httpx raises exception."""
-        # Mock a process that's running but httpx raises exception
+        """Test stale, unresponsive process info when httpx raises exception."""
         with patch.object(
             process_sandbox_service,
             '_get_process_status',
-            return_value=SandboxStatus.RUNNING,
+            return_value=SandboxStatus.STARTING,
         ):
-            # Mock httpx client to raise exception
             process_sandbox_service.httpx_client.get.side_effect = Exception(
                 'Connection failed'
             )
@@ -373,7 +406,11 @@ class TestProcessSandboxService:
                 user_id='test-user-id',
                 working_dir='/tmp/test',
                 session_api_key='test-key',
-                created_at=datetime.now(),
+                created_at=datetime.fromtimestamp(
+                    datetime.now().timestamp()
+                    - process_sandbox_service.startup_grace_seconds
+                    - 1
+                ),
                 sandbox_spec_id='test-spec',
             )
 

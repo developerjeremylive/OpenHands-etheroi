@@ -81,6 +81,7 @@ class ProcessSandboxService(SandboxService):
     agent_server_module: str
     health_check_path: str
     httpx_client: httpx.AsyncClient
+    startup_grace_seconds: int = 30
 
     def __post_init__(self):
         """Initialize the service after dataclass creation."""
@@ -175,7 +176,7 @@ class ProcessSandboxService(SandboxService):
         return False
 
     def _get_process_status(self, process_info: ProcessInfo) -> SandboxStatus:
-        """Get the status of a process."""
+        """Get process lifecycle status before the agent-server health check."""
         try:
             process = psutil.Process(process_info.pid)
             if not process.is_running():
@@ -187,9 +188,19 @@ class ProcessSandboxService(SandboxService):
             if status in (psutil.STATUS_ZOMBIE, psutil.STATUS_DEAD):
                 return SandboxStatus.MISSING
 
-            return SandboxStatus.RUNNING
+            # A live process can be sleeping while healthy, or actively running while
+            # still starting. The HTTP health check below is what promotes it to
+            # the public RUNNING sandbox state.
+            return SandboxStatus.STARTING
         except (psutil.NoSuchProcess, psutil.AccessDenied):
             return SandboxStatus.MISSING
+
+    def _server_not_ready_status(self, process_info: ProcessInfo) -> SandboxStatus:
+        """Return STARTING during startup grace, then ERROR for stale failures."""
+        age_seconds = utc_now().timestamp() - process_info.created_at.timestamp()
+        if age_seconds <= self.startup_grace_seconds:
+            return SandboxStatus.STARTING
+        return SandboxStatus.ERROR
 
     async def _process_to_sandbox_info(
         self, sandbox_id: str, process_info: ProcessInfo
@@ -200,14 +211,14 @@ class ProcessSandboxService(SandboxService):
         exposed_urls = None
         session_api_key = None
 
-        if status == SandboxStatus.RUNNING:
-            # Check if server is actually responding
+        if status in (SandboxStatus.STARTING, SandboxStatus.RUNNING):
             try:
                 url = replace_localhost_hostname_for_docker(
                     f'http://localhost:{process_info.port}{self.health_check_path}'
                 )
                 response = await self.httpx_client.get(url, timeout=5.0)
                 if response.status_code == 200:
+                    status = SandboxStatus.RUNNING
                     exposed_urls = [
                         ExposedUrl(
                             name=AGENT_SERVER,
@@ -217,9 +228,9 @@ class ProcessSandboxService(SandboxService):
                     ]
                     session_api_key = process_info.session_api_key
                 else:
-                    status = SandboxStatus.ERROR
+                    status = self._server_not_ready_status(process_info)
             except Exception:
-                status = SandboxStatus.ERROR
+                status = self._server_not_ready_status(process_info)
 
         return SandboxInfo(
             id=sandbox_id,
@@ -429,6 +440,10 @@ class ProcessSandboxServiceInjector(SandboxServiceInjector):
     health_check_path: str = Field(
         default='/alive', description='Health check endpoint path'
     )
+    startup_grace_seconds: int = Field(
+        default=30,
+        description='Seconds to report live but not-yet-healthy agent processes as starting',
+    )
 
     async def inject(
         self, state: InjectorState, request: Request | None = None
@@ -455,4 +470,5 @@ class ProcessSandboxServiceInjector(SandboxServiceInjector):
                 agent_server_module=self.agent_server_module,
                 health_check_path=self.health_check_path,
                 httpx_client=httpx_client,
+                startup_grace_seconds=self.startup_grace_seconds,
             )
