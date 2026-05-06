@@ -19,9 +19,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from openhands.agent_server.models import Success
 from openhands.analytics import get_analytics_service, resolve_analytics_context
-from openhands.app_server.app_conversation.agent_server_routing import (
-    agent_kind_to_router_path,
-)
 from openhands.app_server.app_conversation.app_conversation_info_service import (
     AppConversationInfoService,
 )
@@ -551,9 +548,8 @@ async def send_message_to_conversation(
     # Send message to agent server
     try:
         content_json = [item.model_dump() for item in request.content]
-        router_path = agent_kind_to_router_path(conversation.agent_kind)
         response = await httpx_client.post(
-            f'{agent_server_url}/api/{router_path}/{conversation_id}/events',
+            f'{agent_server_url}/api/conversations/{conversation_id}/events',
             json={
                 'role': request.role,
                 'content': content_json,
