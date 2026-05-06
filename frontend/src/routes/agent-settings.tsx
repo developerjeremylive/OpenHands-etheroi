@@ -120,6 +120,19 @@ function AgentSettingsScreen() {
     // Save Claude credentials first if entered (Claude Code preset only).
     if (isAcp && selectedPreset === "claude-code" && claudeCredentials.trim()) {
       try {
+        const parsed = JSON.parse(claudeCredentials.trim());
+        if (!parsed.access_token && !parsed.refresh_token) {
+          displayErrorToast(
+            t(I18nKey.SETTINGS$AGENT_CLAUDE_CREDENTIALS_INVALID),
+          );
+          return;
+        }
+      } catch {
+        displayErrorToast(t(I18nKey.SETTINGS$AGENT_CLAUDE_CREDENTIALS_INVALID));
+        return;
+      }
+
+      try {
         await SecretsService.upsertSecret(
           CLAUDE_CREDENTIALS_SECRET_NAME,
           claudeCredentials.trim(),

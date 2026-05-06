@@ -247,6 +247,28 @@ describe("AgentSettingsScreen — Claude Max credentials", () => {
     expect(saveSpy).toHaveBeenCalledTimes(1);
   });
 
+  it("rejects credentials that are not valid JSON", async () => {
+    const upsertSpy = vi
+      .spyOn(SecretsService, "upsertSecret")
+      .mockResolvedValue(true);
+
+    renderAgentSettings();
+
+    await waitFor(() => {
+      expect(screen.getByTestId("claude-credentials-input")).toBeInTheDocument();
+    });
+
+    const { fireEvent } = await import("@testing-library/react");
+    fireEvent.change(screen.getByTestId("claude-credentials-input"), {
+      target: { value: "not-json" },
+    });
+    await userEvent.click(screen.getByTestId("agent-save-button"));
+
+    await waitFor(() => {
+      expect(upsertSpy).not.toHaveBeenCalled();
+    });
+  });
+
   it("does not call upsertSecret when credentials field is empty", async () => {
     const upsertSpy = vi
       .spyOn(SecretsService, "upsertSecret")

@@ -11,6 +11,8 @@ import stat
 import tempfile
 from uuid import UUID
 
+import pytest
+
 from openhands.app_server.app_conversation.live_status_app_conversation_service import (
     LiveStatusAppConversationService,
 )
@@ -133,3 +135,70 @@ def test_multiple_claude_files_share_config_dir(tmp_path, monkeypatch):
     assert os.path.isfile(os.path.join(config_dir, "settings.json"))
     # Both files sit under the same directory — env var appears once.
     assert list(extra_env.keys()) == ["CLAUDE_CONFIG_DIR"]
+
+
+# ---------------------------------------------------------------------------
+# Security: path traversal tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "malicious_name",
+    [
+        "FILE:~/.claude/../../etc/passwd",
+        "FILE:~/.claude/../../../tmp/evil",
+        "FILE:~/.claude/./../../etc/shadow",
+    ],
+)
+def test_path_traversal_rejected(tmp_path, monkeypatch, malicious_name):
+    """FILE: secrets containing path traversal sequences are silently rejected."""
+    monkeypatch.setattr(tempfile, "gettempdir", lambda: str(tmp_path))
+
+    secrets = {malicious_name: _static("malicious content")}
+    _, extra_env = _inject(secrets, CONV_ID)
+
+    # No env var should be set and no file written outside the temp base
+    assert extra_env == {}
+    for dirpath, _, filenames in os.walk(str(tmp_path)):
+        for fname in filenames:
+            full = os.path.join(dirpath, fname)
+            assert "etc" not in full, f"Traversal escaped to {full}"
+            assert "evil" not in full, f"Traversal escaped to {full}"
+
+
+def test_absolute_path_in_relative_rejected(tmp_path, monkeypatch):
+    """A FILE: secret whose path after stripping the prefix is absolute is rejected."""
+    monkeypatch.setattr(tempfile, "gettempdir", lambda: str(tmp_path))
+
+    # Crafted so that after stripping "~/.claude/" we get "/etc/passwd"
+    secrets = {"FILE:~/.claude//etc/passwd": _static("malicious")}
+    _, extra_env = _inject(secrets, CONV_ID)
+
+    assert extra_env == {}
+    assert not os.path.exists("/etc/passwd" + ".injected")  # sanity
+
+
+# ---------------------------------------------------------------------------
+# Cleanup tests
+# ---------------------------------------------------------------------------
+
+
+def test_cleanup_removes_temp_dir(tmp_path, monkeypatch):
+    """_cleanup_acp_temp_dir removes the directory created by _inject_file_secrets."""
+    monkeypatch.setattr(tempfile, "gettempdir", lambda: str(tmp_path))
+
+    secrets = {"FILE:~/.claude/credentials.json": _static("{}")}
+    _inject(secrets, CONV_ID)
+
+    base_tmp = os.path.join(str(tmp_path), f"oh-acp-{CONV_ID.hex}")
+    assert os.path.isdir(base_tmp)
+
+    LiveStatusAppConversationService._cleanup_acp_temp_dir(CONV_ID)
+    assert not os.path.exists(base_tmp)
+
+
+def test_cleanup_is_noop_when_no_dir(tmp_path, monkeypatch):
+    """_cleanup_acp_temp_dir is safe to call when no temp dir exists."""
+    monkeypatch.setattr(tempfile, "gettempdir", lambda: str(tmp_path))
+    # Should not raise
+    LiveStatusAppConversationService._cleanup_acp_temp_dir(CONV_ID)

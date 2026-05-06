@@ -1475,6 +1475,24 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
     )
 
     @staticmethod
+    def _validate_relative_path(relative: str, secret_name: str) -> str | None:
+        """Validate a path component extracted from a FILE: secret name.
+
+        Guards against path traversal attacks (e.g. ``../../etc/passwd``).
+        Returns the normalised relative path on success, or ``None`` if the
+        path is unsafe.
+        """
+        normalized = os.path.normpath(relative)
+        if os.path.isabs(normalized) or normalized.startswith('..') or normalized == '.':
+            _logger.warning(
+                'FILE: secret %r contains an unsafe path component %r; ignoring',
+                secret_name,
+                relative,
+            )
+            return None
+        return normalized
+
+    @staticmethod
     def _inject_file_secrets(
         secrets: dict,
         conversation_id: UUID,
@@ -1485,6 +1503,10 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         Instead their content is written as a file at a temporary path derived
         from the conversation ID, and an appropriate env var (e.g.
         ``CLAUDE_CONFIG_DIR``) is added so the ACP subprocess can find the file.
+
+        The temp directory is named ``oh-acp-{conversation_id.hex}`` under the
+        system temp dir.  Call :meth:`_cleanup_acp_temp_dir` with the same
+        conversation ID to delete it (e.g. in :meth:`delete_app_conversation`).
 
         Args:
             secrets: Full secrets dict (name → SecretSource).
@@ -1529,31 +1551,40 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
 
             matched = False
             for path_prefix, env_var, subdir_name in handlers:
-                if file_path.startswith(path_prefix):
-                    relative = file_path[len(path_prefix):]  # e.g. credentials.json
-                    group_dir = os.path.join(base_tmp, subdir_name)
-                    os.makedirs(group_dir, mode=0o700, exist_ok=True)
+                if not file_path.startswith(path_prefix):
+                    continue
 
-                    target = os.path.join(group_dir, relative)
-                    target_dir = os.path.dirname(target)
-                    if target_dir:
-                        os.makedirs(target_dir, mode=0o700, exist_ok=True)
-
-                    with open(target, 'w') as fh:
-                        fh.write(value)
-                    os.chmod(target, stat.S_IRUSR | stat.S_IWUSR)
-
-                    if env_var not in extra_env:
-                        extra_env[env_var] = group_dir
-                    _logger.info(
-                        'FILE: secret %r written to %r; injecting %s=%r',
-                        secret_name,
-                        target,
-                        env_var,
-                        group_dir,
-                    )
-                    matched = True
+                relative = file_path[len(path_prefix):]  # e.g. credentials.json
+                safe_relative = LiveStatusAppConversationService._validate_relative_path(
+                    relative, secret_name
+                )
+                if safe_relative is None:
+                    matched = True  # consumed — don't fall through to "no handler"
                     break
+
+                group_dir = os.path.join(base_tmp, subdir_name)
+                os.makedirs(group_dir, mode=0o700, exist_ok=True)
+
+                target = os.path.join(group_dir, safe_relative)
+                target_dir = os.path.dirname(target)
+                if target_dir and target_dir != group_dir:
+                    os.makedirs(target_dir, mode=0o700, exist_ok=True)
+
+                with open(target, 'w') as fh:
+                    fh.write(value)
+                os.chmod(target, stat.S_IRUSR | stat.S_IWUSR)
+
+                if env_var not in extra_env:
+                    extra_env[env_var] = group_dir
+                _logger.info(
+                    'FILE: secret %r written to %r; injecting %s=%r',
+                    secret_name,
+                    target,
+                    env_var,
+                    group_dir,
+                )
+                matched = True
+                break
 
             if not matched:
                 _logger.warning(
@@ -1562,6 +1593,23 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                 )
 
         return regular_secrets, extra_env
+
+    @staticmethod
+    def _cleanup_acp_temp_dir(conversation_id: UUID) -> None:
+        """Remove the per-conversation ACP credential temp directory.
+
+        Safe to call even if the directory was never created (e.g. for
+        non-ACP conversations or when no FILE: secrets were stored).
+        """
+        base_tmp = os.path.join(
+            tempfile.gettempdir(),
+            f'oh-acp-{conversation_id.hex}',
+        )
+        if os.path.isdir(base_tmp):
+            shutil.rmtree(base_tmp, ignore_errors=True)
+            _logger.info(
+                'Cleaned up ACP temp dir for conversation %s', conversation_id
+            )
 
     @staticmethod
     def _acp_provider_env(user: UserInfo) -> dict[str, str]:
@@ -1998,7 +2046,12 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
 
             # Delete from database using the conversation info from app_conversation
             # AppConversation extends AppConversationInfo, so we can use it directly
-            return await self._delete_from_database(app_conversation)
+            result = await self._delete_from_database(app_conversation)
+
+            # Clean up ACP credential temp files (no-op if none were created).
+            self._cleanup_acp_temp_dir(conversation_id)
+
+            return result
 
         except Exception as e:
             _logger.error(

@@ -24513,6 +24513,23 @@
     "uk": "Paste credentials JSON here to save or update...",
     "ca": "Paste credentials JSON here to save or update..."
   },
+  "SETTINGS$AGENT_CLAUDE_CREDENTIALS_INVALID": {
+    "en": "Credentials must be valid JSON containing access_token or refresh_token",
+    "ja": "Credentials must be valid JSON containing access_token or refresh_token",
+    "zh-CN": "Credentials must be valid JSON containing access_token or refresh_token",
+    "zh-TW": "Credentials must be valid JSON containing access_token or refresh_token",
+    "ko-KR": "Credentials must be valid JSON containing access_token or refresh_token",
+    "no": "Credentials must be valid JSON containing access_token or refresh_token",
+    "it": "Credentials must be valid JSON containing access_token or refresh_token",
+    "pt": "Credentials must be valid JSON containing access_token or refresh_token",
+    "es": "Credentials must be valid JSON containing access_token or refresh_token",
+    "ar": "Credentials must be valid JSON containing access_token or refresh_token",
+    "fr": "Credentials must be valid JSON containing access_token or refresh_token",
+    "tr": "Credentials must be valid JSON containing access_token or refresh_token",
+    "de": "Credentials must be valid JSON containing access_token or refresh_token",
+    "uk": "Credentials must be valid JSON containing access_token or refresh_token",
+    "ca": "Credentials must be valid JSON containing access_token or refresh_token"
+  },
   "SETTINGS$PROFILES_DESCRIPTION": {
     "en": "Profiles are created automatically when you save a configuration on the LLM page. The newest one becomes active; switch, rename, or delete saved profiles from this list.",
     "ja": "LLMページで設定を保存すると、プロファイルが自動的に作成されます。最新のプロファイルがアクティブになり、このリストから切り替え、名前の変更、削除ができます。",
