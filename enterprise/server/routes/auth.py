@@ -905,10 +905,17 @@ async def complete_onboarding(request: Request):
     redirect_url = '/'
     try:
         body = await request.json()
+        logger.info(
+            'complete_onboarding request body',
+            extra={'user_id': user_id, 'has_redirect_url': 'redirect_url' in body, 'redirect_url': body.get('redirect_url', 'NOT_SET')},
+        )
         if body.get('redirect_url'):
             redirect_url = body['redirect_url']
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning(
+            'complete_onboarding failed to parse body',
+            extra={'user_id': user_id, 'error': str(e)},
+        )
 
     user = await UserStore.mark_onboarding_completed(user_id)
     if not user:
