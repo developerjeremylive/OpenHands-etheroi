@@ -5,7 +5,7 @@ import warnings
 from datetime import datetime, timedelta, timezone
 from types import MappingProxyType
 from typing import Annotated, Optional, cast
-from urllib.parse import quote, urlencode
+from urllib.parse import parse_qs, quote, urlencode, urlparse
 from uuid import UUID as parse_uuid
 
 from fastapi import (
@@ -699,6 +699,36 @@ async def authenticate(request: Request):
         return response
 
 
+def _extract_login_inner_return_to(relative_url: str) -> str | None:
+    """Extract the inner ``returnTo`` from a ``/login?returnTo=...`` URL.
+
+    Returns the decoded inner ``returnTo`` value, or ``None`` if
+    ``relative_url`` is not a login URL or has no inner ``returnTo``.
+
+    The OAuth flow's ``state`` is set to the full URL of the page that
+    triggered the login (see ``generateAuthUrl`` in the frontend).
+    For an unauthenticated deep-link visit, that page is itself
+    ``/login?returnTo=<actual destination>``, so the OAuth callback's
+    ``redirect_url`` ends up *wrapping* the user's true destination
+    inside a login URL. Sending the user back through ``/login`` after
+    onboarding works in principle (``LoginPage`` re-redirects authed
+    users to its own ``returnTo``), but the round-trip adds extra
+    state and is brittle when query-string layering goes wrong.
+
+    Unwrapping here keeps the post-onboarding navigation a single
+    direct step, e.g. ``/onboarding?returnTo=%2Fsettings%2Fuser``
+    rather than the doubly-nested
+    ``/onboarding?returnTo=%2Flogin%3FreturnTo%3D%252Fsettings...``.
+    """
+    parsed = urlparse(relative_url)
+    if parsed.path != '/login':
+        return None
+    inner = parse_qs(parsed.query).get('returnTo')
+    if not inner:
+        return None
+    return inner[0]
+
+
 def _build_onboarding_redirect(original_url: str, web_url: str) -> str:
     """Build the ``/onboarding`` redirect URL preserving ``returnTo``.
 
@@ -721,6 +751,13 @@ def _build_onboarding_redirect(original_url: str, web_url: str) -> str:
     rather than an absolute URL: that keeps the URL short, avoids
     leaking the deployment origin into the browser bar a second time,
     and lets the frontend use ``navigate(returnTo)`` directly.
+
+    When ``original_url`` is itself a ``/login?returnTo=...`` URL —
+    which is the common case for unauthenticated deep-link visits,
+    because the OAuth flow's ``state`` carries the full login page
+    URL — the *inner* ``returnTo`` is extracted so the user lands at
+    their real destination in a single navigation rather than
+    bouncing through ``/login`` after onboarding.
     """
     onboarding_url = f'{web_url}/onboarding'
     if not original_url:
@@ -734,6 +771,13 @@ def _build_onboarding_redirect(original_url: str, web_url: str) -> str:
     relative = original_url
     if web_url and original_url.startswith(web_url):
         relative = original_url[len(web_url):] or '/'
+
+    # If we ended up with a login-page URL, unwrap its inner
+    # ``returnTo`` so post-onboarding navigation goes straight to the
+    # user's real destination instead of bouncing through ``/login``.
+    inner_return_to = _extract_login_inner_return_to(relative)
+    if inner_return_to is not None:
+        relative = inner_return_to
 
     # Skip the trivial home-page case to keep the URL clean.
     if relative in ('', '/'):

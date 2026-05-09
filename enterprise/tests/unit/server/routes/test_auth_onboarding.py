@@ -360,6 +360,72 @@ class TestBuildOnboardingRedirect:
             '?returnTo=https%3A%2F%2Fother.example.com%2Ffoo'
         )
 
+    def test_unwraps_login_returnTo_to_inner_destination(self):
+        """Regression: login-wrapped destinations are unwrapped.
+
+        An unauthenticated deep-link visit creates an OAuth ``state``
+        that wraps the user's real destination inside a
+        ``/login?returnTo=...`` URL. The onboarding redirect must
+        unwrap that so the user lands directly at their destination
+        after finishing onboarding instead of bouncing through
+        ``/login`` (which adds round-trips and is brittle when
+        query-string layering goes wrong).
+        """
+        result = _build_onboarding_redirect(
+            'https://example.com/login?returnTo=%2Fsettings%2Fuser'
+            '&login_method=github',
+            'https://example.com',
+        )
+        assert result == (
+            'https://example.com/onboarding'
+            '?returnTo=%2Fsettings%2Fuser'
+        )
+
+    def test_unwraps_login_returnTo_with_inner_query_string(self):
+        """Inner destinations with their own query string survive unwrap.
+
+        Destinations like ``/conversations/abc?foo=bar`` must keep
+        their query string when the outer login URL is unwrapped.
+        """
+        result = _build_onboarding_redirect(
+            'https://example.com/login'
+            '?returnTo=%2Fconversations%2Fabc%3Ffoo%3Dbar'
+            '&login_method=github',
+            'https://example.com',
+        )
+        assert result == (
+            'https://example.com/onboarding'
+            '?returnTo=%2Fconversations%2Fabc%3Ffoo%3Dbar'
+        )
+
+    def test_unwraps_login_returnTo_to_bare_home_skips_returnTo(self):
+        """Home-page short-circuit applies after the unwrap step.
+
+        If the unwrapped destination is the bare home page, the
+        helper should still emit the clean ``/onboarding`` URL with
+        no ``returnTo`` query parameter.
+        """
+        result = _build_onboarding_redirect(
+            'https://example.com/login?returnTo=%2F&login_method=github',
+            'https://example.com',
+        )
+        assert result == 'https://example.com/onboarding'
+
+    def test_does_not_unwrap_non_login_path(self):
+        """Non-login paths with a ``returnTo`` are preserved verbatim.
+
+        Only ``/login`` URLs get the inner-returnTo unwrap; other
+        paths that happen to carry a ``returnTo`` query parameter
+        must be preserved as-is.
+        """
+        result = _build_onboarding_redirect(
+            'https://example.com/foo?returnTo=%2Fbar', 'https://example.com'
+        )
+        assert result == (
+            'https://example.com/onboarding'
+            '?returnTo=%2Ffoo%3FreturnTo%3D%252Fbar'
+        )
+
 
 # --- Tests for /complete_onboarding endpoint ---
 
