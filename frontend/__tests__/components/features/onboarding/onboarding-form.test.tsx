@@ -542,6 +542,14 @@ describe("OnboardingForm - redirect when already onboarded", () => {
 });
 
 describe("onboarding-form clientLoader", () => {
+  // The loader takes a ``{ request }`` arg from react-router. Most of
+  // the existing tests don't care about the URL, so build a default
+  // request pointing at bare ``/onboarding`` and let returnTo-aware
+  // tests override it.
+  const makeArgs = (url = "https://app.example.com/onboarding") => ({
+    request: new Request(url),
+  });
+
   beforeEach(() => {
     mockQueryClientGetData.mockReset();
     mockQueryClientSetData.mockReset();
@@ -556,7 +564,7 @@ describe("onboarding-form clientLoader", () => {
       };
       mockQueryClientGetData.mockReturnValue(saasConfig);
 
-      const result = await clientLoader();
+      const result = await clientLoader(makeArgs());
 
       expect(result).toBeDefined();
       expect((result as Response).status).toBe(302);
@@ -570,7 +578,7 @@ describe("onboarding-form clientLoader", () => {
       };
       mockQueryClientGetData.mockReturnValue(ossConfig);
 
-      const result = await clientLoader();
+      const result = await clientLoader(makeArgs());
 
       expect(result).toBeDefined();
       expect((result as Response).status).toBe(302);
@@ -584,7 +592,7 @@ describe("onboarding-form clientLoader", () => {
       };
       mockQueryClientGetData.mockReturnValue(undefinedConfig);
 
-      const result = await clientLoader();
+      const result = await clientLoader(makeArgs());
 
       expect(result).toBeDefined();
       expect((result as Response).status).toBe(302);
@@ -595,7 +603,7 @@ describe("onboarding-form clientLoader", () => {
       mockQueryClientGetData.mockReturnValue(null);
       mockGetConfig.mockResolvedValue(null);
 
-      const result = await clientLoader();
+      const result = await clientLoader(makeArgs());
 
       expect(result).toBeDefined();
       expect((result as Response).status).toBe(302);
@@ -609,7 +617,7 @@ describe("onboarding-form clientLoader", () => {
       };
       mockQueryClientGetData.mockReturnValue(saasCloudConfig);
 
-      const result = await clientLoader();
+      const result = await clientLoader(makeArgs());
 
       expect(result).toEqual({ config: saasCloudConfig });
     });
@@ -624,9 +632,106 @@ describe("onboarding-form clientLoader", () => {
       };
       mockQueryClientGetData.mockReturnValue(saasSelfHostedConfig);
 
-      const result = await clientLoader();
+      const result = await clientLoader(makeArgs());
 
       expect(result).toEqual({ config: saasSelfHostedConfig });
+    });
+  });
+
+  describe("returnTo handling on redirect", () => {
+    // The frontend can disagree with the backend about whether
+    // onboarding applies (e.g. the backend gates on
+    // ``DEPLOYMENT_MODE='cloud'`` while the frontend gates on
+    // ``feature_flags.enable_onboarding``). When the frontend
+    // redirects users away from /onboarding because the flag is
+    // off, it must still honor the ``?returnTo=`` query parameter
+    // so deep links survive the disagreement.
+    it("should honor returnTo when enable_onboarding is false", async () => {
+      const saasConfig = {
+        app_mode: "saas",
+        feature_flags: { deployment_mode: "cloud", enable_onboarding: false },
+      };
+      mockQueryClientGetData.mockReturnValue(saasConfig);
+
+      const result = await clientLoader(
+        makeArgs(
+          "https://app.example.com/onboarding?returnTo=%2Fsettings%2Fuser",
+        ),
+      );
+
+      expect((result as Response).status).toBe(302);
+      expect((result as Response).headers.get("Location")).toBe(
+        "/settings/user",
+      );
+    });
+
+    it("should honor returnTo with query string when app_mode is oss", async () => {
+      const ossConfig = {
+        app_mode: "oss",
+        feature_flags: { deployment_mode: undefined, enable_onboarding: true },
+      };
+      mockQueryClientGetData.mockReturnValue(ossConfig);
+
+      const result = await clientLoader(
+        makeArgs(
+          "https://app.example.com/onboarding" +
+            "?returnTo=%2Fconversations%2Fabc%3Ffoo%3Dbar",
+        ),
+      );
+
+      expect((result as Response).headers.get("Location")).toBe(
+        "/conversations/abc?foo=bar",
+      );
+    });
+
+    it("should reject absolute URL returnTo and fall back to /", async () => {
+      // Safety: never let a hand-crafted ``?returnTo=https://evil.example``
+      // turn the loader's redirect into an open-redirect vector.
+      const ossConfig = {
+        app_mode: "oss",
+        feature_flags: { deployment_mode: undefined, enable_onboarding: true },
+      };
+      mockQueryClientGetData.mockReturnValue(ossConfig);
+
+      const result = await clientLoader(
+        makeArgs(
+          "https://app.example.com/onboarding" +
+            "?returnTo=https%3A%2F%2Fevil.example.com%2Fpwn",
+        ),
+      );
+
+      expect((result as Response).headers.get("Location")).toBe("/");
+    });
+
+    it("should reject protocol-relative returnTo and fall back to /", async () => {
+      const ossConfig = {
+        app_mode: "oss",
+        feature_flags: { deployment_mode: undefined, enable_onboarding: true },
+      };
+      mockQueryClientGetData.mockReturnValue(ossConfig);
+
+      const result = await clientLoader(
+        makeArgs(
+          "https://app.example.com/onboarding" +
+            "?returnTo=%2F%2Fevil.example.com%2Fpwn",
+        ),
+      );
+
+      expect((result as Response).headers.get("Location")).toBe("/");
+    });
+
+    it("should fall back to / when returnTo is missing", async () => {
+      const ossConfig = {
+        app_mode: "oss",
+        feature_flags: { deployment_mode: undefined, enable_onboarding: true },
+      };
+      mockQueryClientGetData.mockReturnValue(ossConfig);
+
+      const result = await clientLoader(
+        makeArgs("https://app.example.com/onboarding"),
+      );
+
+      expect((result as Response).headers.get("Location")).toBe("/");
     });
   });
 
@@ -638,7 +743,7 @@ describe("onboarding-form clientLoader", () => {
       };
       mockQueryClientGetData.mockReturnValue(cachedConfig);
 
-      await clientLoader();
+      await clientLoader(makeArgs());
 
       expect(mockQueryClientGetData).toHaveBeenCalledWith([
         "web-client-config",
@@ -654,7 +759,7 @@ describe("onboarding-form clientLoader", () => {
       mockQueryClientGetData.mockReturnValue(null);
       mockGetConfig.mockResolvedValue(fetchedConfig);
 
-      const result = await clientLoader();
+      const result = await clientLoader(makeArgs());
 
       expect(mockGetConfig).toHaveBeenCalled();
       expect(mockQueryClientSetData).toHaveBeenCalledWith(
