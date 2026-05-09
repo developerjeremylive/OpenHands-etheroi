@@ -1,6 +1,11 @@
 import React from "react";
 import { useTranslation } from "react-i18next";
-import { useNavigate, redirect, useLoaderData } from "react-router";
+import {
+  useNavigate,
+  redirect,
+  useLoaderData,
+  useSearchParams,
+} from "react-router";
 import StepHeader from "#/components/features/onboarding/step-header";
 import { StepContent } from "#/components/features/onboarding/step-content";
 import { BrandButton } from "#/components/features/settings/brand-button";
@@ -85,6 +90,11 @@ function OnboardingForm() {
   const navigate = useNavigate();
   const loaderData = useLoaderData<typeof clientLoader>();
   const config = loaderData?.config;
+  const [searchParams] = useSearchParams();
+  // ``OnboardingGuard`` forwards the user's originally requested URL
+  // here so we can restore it after they finish the form. Default to
+  // ``/`` to preserve the previous behavior when no returnTo is set.
+  const returnTo = searchParams.get("returnTo") || "/";
   const { data: onboardingStatus, isLoading: isOnboardingStatusLoading } =
     useOnboardingStatus();
   const { mutate: submitOnboarding } = useSubmitOnboarding();
@@ -92,12 +102,16 @@ function OnboardingForm() {
   React.useEffect(() => {
     if (isOnboardingStatusLoading) return;
     if (onboardingStatus?.should_complete_onboarding === false) {
-      navigate("/", { replace: true });
+      // Honor returnTo if the user already completed onboarding so a
+      // stale ``/onboarding`` link still respects their deep-link
+      // destination.
+      navigate(returnTo, { replace: true });
     }
   }, [
     onboardingStatus?.should_complete_onboarding,
     isOnboardingStatusLoading,
     navigate,
+    returnTo,
   ]);
 
   const onboardingAppMode: OnboardingAppMode = getOnboardingAppMode(
@@ -181,7 +195,7 @@ function OnboardingForm() {
 
   const handleNext = () => {
     if (isLastStep) {
-      submitOnboarding({ selections: answers });
+      submitOnboarding({ selections: answers, returnTo });
     } else {
       setCurrentStepIndex((prev) => prev + 1);
     }

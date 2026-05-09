@@ -14,7 +14,9 @@ const mockNavigate = vi.fn();
 const mockUseMe = vi.fn();
 
 // Loader data set in beforeEach for each test suite
-let loaderData: { config: { app_mode: string; feature_flags: { deployment_mode: string } } };
+let loaderData: {
+  config: { app_mode: string; feature_flags: { deployment_mode: string } };
+};
 
 vi.mock("react-router", async (importOriginal) => {
   const original = await importOriginal<typeof import("react-router")>();
@@ -51,9 +53,7 @@ vi.mock("#/api/option-service/option-service.api", () => ({
   },
 }));
 
-
-
-const renderOnboardingForm = async () => {
+const renderOnboardingForm = async (initialEntry: string = "/") => {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
@@ -69,7 +69,7 @@ const renderOnboardingForm = async () => {
   const result = render(
     <I18nextProvider i18n={i18n}>
       <QueryClientProvider client={queryClient}>
-        <RouterStub initialEntries={["/"]} />
+        <RouterStub initialEntries={[initialEntry]} />
       </QueryClientProvider>
     </I18nextProvider>,
   );
@@ -177,13 +177,15 @@ describe("OnboardingForm - Cloud Mode", () => {
     await user.click(screen.getByRole("button", { name: /finish/i }));
 
     expect(mockMutate).toHaveBeenCalledTimes(1);
-    expect(mockMutate).toHaveBeenCalledWith({
-      selections: {
-        org_size: "org_2_10",
-        use_case: ["new_features"],
-        role: "software_engineer",
-      },
-    });
+    expect(mockMutate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        selections: {
+          org_size: "org_2_10",
+          use_case: ["new_features"],
+          role: "software_engineer",
+        },
+      }),
+    );
   });
 
   it("should render 5 options on step 1 (org size question)", async () => {
@@ -214,13 +216,15 @@ describe("OnboardingForm - Cloud Mode", () => {
     await user.click(screen.getByRole("button", { name: /finish/i }));
 
     // Verify all selections were preserved
-    expect(mockMutate).toHaveBeenCalledWith({
-      selections: {
-        org_size: "solo",
-        use_case: ["fixing_bugs"],
-        role: "cto_founder",
-      },
-    });
+    expect(mockMutate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        selections: {
+          org_size: "solo",
+          use_case: ["fixing_bugs"],
+          role: "cto_founder",
+        },
+      }),
+    );
   });
 
   it("should allow selecting multiple options on multi-select steps", async () => {
@@ -241,13 +245,15 @@ describe("OnboardingForm - Cloud Mode", () => {
     await user.click(screen.getByTestId("step-option-software_engineer"));
     await user.click(screen.getByRole("button", { name: /finish/i }));
 
-    expect(mockMutate).toHaveBeenCalledWith({
-      selections: {
-        org_size: "solo",
-        use_case: ["new_features", "fixing_bugs", "refactoring"],
-        role: "software_engineer",
-      },
-    });
+    expect(mockMutate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        selections: {
+          org_size: "solo",
+          use_case: ["new_features", "fixing_bugs", "refactoring"],
+          role: "software_engineer",
+        },
+      }),
+    );
   });
 
   it("should allow deselecting options on multi-select steps", async () => {
@@ -269,13 +275,15 @@ describe("OnboardingForm - Cloud Mode", () => {
     await user.click(screen.getByTestId("step-option-software_engineer"));
     await user.click(screen.getByRole("button", { name: /finish/i }));
 
-    expect(mockMutate).toHaveBeenCalledWith({
-      selections: {
-        org_size: "solo",
-        use_case: ["fixing_bugs"],
-        role: "software_engineer",
-      },
-    });
+    expect(mockMutate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        selections: {
+          org_size: "solo",
+          use_case: ["fixing_bugs"],
+          role: "software_engineer",
+        },
+      }),
+    );
   });
 
   it("should show all progress bars filled on the last step", async () => {
@@ -397,14 +405,16 @@ describe("OnboardingForm - Self-Hosted Mode", () => {
     await user.click(screen.getByRole("button", { name: /finish/i }));
 
     expect(mockMutate).toHaveBeenCalledTimes(1);
-    expect(mockMutate).toHaveBeenCalledWith({
-      selections: {
-        org_name: "Acme Corp",
-        org_domain: "acme.com",
-        org_size: "org_2_10",
-        use_case: ["new_features"],
-      },
-    });
+    expect(mockMutate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        selections: {
+          org_name: "Acme Corp",
+          org_domain: "acme.com",
+          org_size: "org_2_10",
+          use_case: ["new_features"],
+        },
+      }),
+    );
   });
 
   it("should show all 3 progress bars filled on the last step", async () => {
@@ -446,7 +456,6 @@ describe("OnboardingForm - Self-Hosted Mode", () => {
     const nextButton = screen.getByRole("button", { name: /next/i });
     expect(nextButton).not.toBeDisabled();
   });
-
 });
 
 describe("OnboardingForm - redirect when already onboarded", () => {
@@ -480,6 +489,55 @@ describe("OnboardingForm - redirect when already onboarded", () => {
     await vi.waitFor(() => {
       expect(mockNavigate).toHaveBeenCalledWith("/", { replace: true });
     });
+  });
+
+  it("should restore the returnTo destination when onboarding is already complete", async () => {
+    // Regression: a stale ``/onboarding`` link must still respect
+    // a ``returnTo`` query param so post-login deep links survive.
+    vi.spyOn(onboardingService, "getStatus").mockResolvedValue({
+      should_complete_onboarding: false,
+    });
+
+    await renderOnboardingForm(
+      `/?returnTo=${encodeURIComponent("/conversations/abc?foo=bar")}`,
+    );
+
+    await vi.waitFor(() => {
+      expect(mockNavigate).toHaveBeenCalledWith("/conversations/abc?foo=bar", {
+        replace: true,
+      });
+    });
+    expect(mockNavigate).not.toHaveBeenCalledWith("/", { replace: true });
+  });
+
+  it("should forward returnTo to submitOnboarding so the post-submit redirect respects it", async () => {
+    // Regression: ``OnboardingGuard`` saves the originally requested
+    // URL as ``?returnTo=...``. ``OnboardingForm`` must thread that
+    // value through the submit mutation so the post-submit fallback
+    // (when the server response has no ``redirect_url``) sends the
+    // user back to where they started.
+    const user = userEvent.setup();
+    await renderOnboardingForm(
+      `/?returnTo=${encodeURIComponent("/conversations/abc?foo=bar")}`,
+    );
+
+    // Step 1 - org size
+    await user.click(screen.getByTestId("step-option-solo"));
+    await user.click(screen.getByRole("button", { name: /next/i }));
+
+    // Step 2 - use case
+    await user.click(screen.getByTestId("step-option-new_features"));
+    await user.click(screen.getByRole("button", { name: /next/i }));
+
+    // Step 3 - role
+    await user.click(screen.getByTestId("step-option-software_engineer"));
+    await user.click(screen.getByRole("button", { name: /finish/i }));
+
+    expect(mockMutate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        returnTo: "/conversations/abc?foo=bar",
+      }),
+    );
   });
 });
 
@@ -559,7 +617,10 @@ describe("onboarding-form clientLoader", () => {
     it("should allow access and return config when app_mode is saas with self_hosted deployment and enable_onboarding is true", async () => {
       const saasSelfHostedConfig = {
         app_mode: "saas",
-        feature_flags: { deployment_mode: "self_hosted", enable_onboarding: true },
+        feature_flags: {
+          deployment_mode: "self_hosted",
+          enable_onboarding: true,
+        },
       };
       mockQueryClientGetData.mockReturnValue(saasSelfHostedConfig);
 
@@ -579,7 +640,9 @@ describe("onboarding-form clientLoader", () => {
 
       await clientLoader();
 
-      expect(mockQueryClientGetData).toHaveBeenCalledWith(["web-client-config"]);
+      expect(mockQueryClientGetData).toHaveBeenCalledWith([
+        "web-client-config",
+      ]);
       expect(mockGetConfig).not.toHaveBeenCalled();
     });
 
