@@ -53,11 +53,11 @@ describe("EventMessage - ACPToolCallEvent dispatch", () => {
       />,
     );
 
-    // The test-utils i18n instance doesn't load the real translation bundle,
-    // so createTitleFromKey falls back to the key literal. Assert on the
-    // key — the integration case (rendered string) is covered by a Storybook
-    // story + manual verification listed in the PR description.
-    expect(screen.getByText("ACTION_MESSAGE$ACP_RUN")).toBeInTheDocument();
+    // ACP cards render the upstream sub-agent's own ``event.title``
+    // verbatim — no translation key wrapping, no verb prefix. Asserting on
+    // the raw title here also documents the fix for the "Reading read foo"
+    // double-verb bug.
+    expect(screen.getByText("gh pr diff 490")).toBeInTheDocument();
   });
 
   it("shows the success check mark for completed tool calls", () => {
@@ -102,8 +102,11 @@ describe("EventMessage - ACPToolCallEvent dispatch", () => {
 
     await user.click(screen.getByRole("button", { name: "Expand" }));
 
-    // Markdown renderer wraps code blocks but the plain text survives.
-    expect(screen.getByText(/gh pr diff 490/)).toBeInTheDocument();
+    // The title and the expanded body both surface "gh pr diff 490" — the
+    // title renders ``event.title`` verbatim, and the body renders the
+    // ``raw_input.command`` inside a ``Command: \`...\``` markdown block —
+    // so we expect to find it in at least two places.
+    expect(screen.getAllByText(/gh pr diff 490/).length).toBeGreaterThan(0);
     expect(screen.getByText(/diff output here/)).toBeInTheDocument();
   });
 });
