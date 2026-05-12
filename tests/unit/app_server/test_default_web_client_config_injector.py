@@ -137,6 +137,7 @@ class TestGetFeatureFlags:
                 'ENABLE_JIRA',
                 'ENABLE_JIRA_DC',
                 'ENABLE_LINEAR',
+                'ENABLE_ACP',
             ]:
                 os.environ.pop(var, None)
             result = _get_feature_flags()
@@ -145,6 +146,7 @@ class TestGetFeatureFlags:
             assert result.enable_jira is False
             assert result.enable_jira_dc is False
             assert result.enable_linear is False
+            assert result.enable_acp is False
 
     def test_enable_billing_true_when_env_var_true(self):
         """When ENABLE_BILLING is 'true', enable_billing flag is True."""
@@ -215,6 +217,36 @@ class TestGetFeatureFlags:
         with patch.dict(os.environ, {'ENABLE_LINEAR': 'true'}):
             result = _get_feature_flags()
             assert result.enable_linear is True
+
+    def test_enable_acp_true_when_env_var_true(self):
+        """When ENABLE_ACP is 'true', enable_acp flag is True."""
+        from openhands.app_server.web_client.default_web_client_config_injector import (
+            _get_feature_flags,
+        )
+
+        with patch.dict(os.environ, {'ENABLE_ACP': 'true'}):
+            result = _get_feature_flags()
+            assert result.enable_acp is True
+
+    def test_enable_acp_true_when_env_var_one(self):
+        """ENABLE_ACP also accepts '1' for older Helm chart formats."""
+        from openhands.app_server.web_client.default_web_client_config_injector import (
+            _get_feature_flags,
+        )
+
+        with patch.dict(os.environ, {'ENABLE_ACP': '1'}):
+            result = _get_feature_flags()
+            assert result.enable_acp is True
+
+    def test_enable_acp_false_when_env_var_other_value(self):
+        """When ENABLE_ACP is neither 'true' nor '1', enable_acp is False."""
+        from openhands.app_server.web_client.default_web_client_config_injector import (
+            _get_feature_flags,
+        )
+
+        with patch.dict(os.environ, {'ENABLE_ACP': 'yes'}):
+            result = _get_feature_flags()
+            assert result.enable_acp is False
 
     def test_multiple_flags_can_be_set(self):
         """Multiple feature flags can be enabled simultaneously."""
@@ -573,3 +605,26 @@ class TestGetSlackEnabled:
             clear=True,
         ):
             assert _get_slack_enabled() is False
+
+
+class TestACPProviders:
+    """Test cases for ACP provider metadata exposed to the web client."""
+
+    def test_default_acp_provider_registry_is_exposed(self):
+        """The web config exposes the SDK-backed ACP provider registry."""
+        from openhands.app_server.web_client.default_web_client_config_injector import (
+            DefaultWebClientConfigInjector,
+        )
+
+        injector = DefaultWebClientConfigInjector()
+
+        assert injector.acp_providers
+        assert {provider.key for provider in injector.acp_providers} >= {
+            'claude-code',
+            'codex',
+            'gemini-cli',
+        }
+        assert all(
+            isinstance(provider.default_command, list)
+            for provider in injector.acp_providers
+        )
