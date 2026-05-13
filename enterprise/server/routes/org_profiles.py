@@ -11,13 +11,13 @@ Permission model:
 from typing import Any
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Path, status
+from fastapi import APIRouter, Body, Depends, HTTPException, Path, status
 from pydantic import BaseModel, Field
-from server.services.org_service import OrgNotFoundError, OrgService
+from server.routes.org_models import OrgNotFoundError
 from sqlalchemy import select
-from sqlalchemy.orm import joinedload
 from storage.org import Org
 from storage.org_member import OrgMember
+from storage.org_service import OrgService
 from storage.session import a_session_maker
 
 from openhands.app_server.settings.llm_profiles import (
@@ -26,7 +26,6 @@ from openhands.app_server.settings.llm_profiles import (
     ProfileLimitExceededError,
     ProfileNotFoundError,
     StrictLLM,
-    has_real_api_key,
 )
 from openhands.app_server.utils.logger import openhands_logger as logger
 from openhands.sdk.llm import LLM
@@ -212,7 +211,9 @@ async def save_profile(
             from openhands.sdk.settings import AgentSettings
 
             agent_settings = AgentSettings.model_validate(org.agent_settings or {})
-            profiles.save(name, agent_settings.llm, include_secrets=request.include_secrets)
+            profiles.save(
+                name, agent_settings.llm, include_secrets=request.include_secrets
+            )
 
         await _save_org_profiles(org_id, profiles)
     except ProfileLimitExceededError as exc:
@@ -282,7 +283,7 @@ async def activate_profile(
 async def rename_profile(
     org_id: UUID,
     name: str = Path(..., min_length=1),
-    request: RenameProfileRequest = ...,
+    request: RenameProfileRequest = Body(...),
     user_id: str = Depends(require_permission(Permission.EDIT_ORG_SETTINGS)),
 ) -> ProfileMutationResponse:
     """Rename an LLM profile."""

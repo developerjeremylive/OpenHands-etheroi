@@ -1,12 +1,10 @@
 """Unit tests for organization LLM profiles router."""
 
 import uuid
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 from server.routes.org_profiles import (
-    ActivateProfileResponse,
-    ProfileDetailResponse,
     ProfileListResponse,
     ProfileMutationResponse,
     RenameProfileRequest,
@@ -88,9 +86,7 @@ class TestProfileListResponse:
         from server.routes.org_profiles import ProfileInfo
 
         profiles = [
-            ProfileInfo(
-                name='test', model='gpt-4', base_url=None, api_key_set=True
-            ),
+            ProfileInfo(name='test', model='gpt-4', base_url=None, api_key_set=True),
         ]
         response = ProfileListResponse(profiles=profiles, active_profile='test')
         assert len(response.profiles) == 1
@@ -120,9 +116,7 @@ class TestSaveProfileRequest:
 
     def test_with_llm(self):
         """Test save request with LLM config."""
-        request = SaveProfileRequest(
-            include_secrets=False, llm=LLM(model='gpt-4')
-        )
+        request = SaveProfileRequest(include_secrets=False, llm=LLM(model='gpt-4'))
         assert request.include_secrets is False
         assert request.llm is not None
         assert request.llm.model == 'gpt-4'
