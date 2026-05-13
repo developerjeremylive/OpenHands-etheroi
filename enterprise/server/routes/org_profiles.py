@@ -15,10 +15,10 @@ from fastapi import APIRouter, Body, Depends, HTTPException, Path, status
 from pydantic import BaseModel, Field
 from server.routes.org_models import OrgNotFoundError
 from sqlalchemy import select
+from storage.database import a_session_maker
 from storage.org import Org
 from storage.org_member import OrgMember
 from storage.org_service import OrgService
-from storage.session import a_session_maker
 
 from openhands.app_server.settings.llm_profiles import (
     LLMProfiles,

@@ -13,8 +13,7 @@ from server.routes.org_profiles import (
 )
 from storage.org import Org
 
-from openhands.app_server.settings.llm_profiles import LLMProfiles
-from openhands.sdk.llm import LLM
+from openhands.app_server.settings.llm_profiles import LLMProfiles, StrictLLM
 
 
 @pytest.fixture
@@ -116,7 +115,7 @@ class TestSaveProfileRequest:
 
     def test_with_llm(self):
         """Test save request with LLM config."""
-        request = SaveProfileRequest(include_secrets=False, llm=LLM(model='gpt-4'))
+        request = SaveProfileRequest(include_secrets=False, llm=StrictLLM(model='gpt-4'))
         assert request.include_secrets is False
         assert request.llm is not None
         assert request.llm.model == 'gpt-4'
