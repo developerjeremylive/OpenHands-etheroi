@@ -39,6 +39,18 @@ from openhands.sdk.settings import (
 )
 
 
+def _secret_eq(a: SecretStr | None, b: SecretStr | None) -> bool:
+    """Compare two optional SecretStr values by their plaintext content.
+
+    Avoids relying on ``SecretStr.__eq__`` which, while currently correct in
+    Pydantic v2, is an implementation detail.  Explicit comparison makes the
+    intent clear and is safe across ``None`` / non-``None`` combinations.
+    """
+    a_val = a.get_secret_value() if a is not None else None
+    b_val = b.get_secret_value() if b is not None else None
+    return a_val == b_val
+
+
 def _coerce_value(value: Any) -> Any:
     """Unwrap SecretStr to plain values."""
     if isinstance(value, SecretStr):
@@ -186,7 +198,7 @@ class Settings(BaseModel):
             llm = self.agent_settings.llm
             if (
                 profile.model != llm.model
-                or profile.api_key != llm.api_key
+                or not _secret_eq(profile.api_key, llm.api_key)
                 or profile.base_url != llm.base_url
             ):
                 self.llm_profiles.active = None
@@ -196,7 +208,7 @@ class Settings(BaseModel):
             elif (
                 profile.acp_server != self.agent_settings.acp_server
                 or profile.acp_model != self.agent_settings.acp_model
-                or profile.api_key != self.agent_settings.llm.api_key
+                or not _secret_eq(profile.api_key, self.agent_settings.llm.api_key)
                 or profile.base_url != self.agent_settings.llm.base_url
             ):
                 self.llm_profiles.active = None
@@ -328,57 +340,13 @@ class Settings(BaseModel):
     def switch_to_profile(self, name: str) -> None:
         """Switch ``agent_settings`` to a saved profile.
 
-        For OpenHands profiles, updates ``agent_settings.llm`` while preserving
-        all other settings (tools, MCP config, etc.).
-
-        For ACP profiles, updates ``acp_server``, ``acp_model``, and the
-        attribution LLM's credentials.  If already in ACP mode, non-profile
-        fields (``acp_command``, ``acp_args``, ``acp_env``) are preserved; if
-        switching from OpenHands mode, fresh :class:`ACPAgentSettings` are
-        created at their defaults.
+        Delegates all switching logic to :meth:`AgentProfile.apply_to_settings`
+        so the cross-kind behavior can be tested in isolation.
 
         Raises :class:`ProfileNotFoundError` if ``name`` isn't a saved profile.
         """
         profile = self.llm_profiles.require(name)
-
-        if profile.agent_kind == 'openhands':
-            # Build a fresh LLM from the profile's identity fields so
-            # post-activation fixups don't bleed back into the stored profile.
-            from openhands.sdk.llm import LLM
-
-            llm = LLM(
-                model=profile.model,
-                api_key=profile.api_key,
-                base_url=profile.base_url,
-            )
-            self.agent_settings = self.agent_settings.model_copy(update={'llm': llm})
-
-        elif profile.agent_kind == 'acp':
-            from openhands.sdk.llm import LLM
-
-            attribution_llm = LLM(
-                model=profile.acp_model or 'acp-managed',
-                api_key=profile.api_key,
-                base_url=profile.base_url,
-            )
-            if isinstance(self.agent_settings, ACPAgentSettings):
-                # Preserve deployment fields (acp_command, acp_args, acp_env);
-                # update only the profile-controlled identity fields.
-                self.agent_settings = self.agent_settings.model_copy(
-                    update={
-                        'acp_server': profile.acp_server,
-                        'acp_model': profile.acp_model,
-                        'llm': attribution_llm,
-                    }
-                )
-            else:
-                # Cross-kind switch: create fresh ACP settings at defaults.
-                self.agent_settings = ACPAgentSettings(
-                    acp_server=profile.acp_server,
-                    acp_model=profile.acp_model,
-                    llm=attribution_llm,
-                )
-
+        self.agent_settings = profile.apply_to_settings(self.agent_settings)
         self.llm_profiles.active = name
 
     def delete_profile(self, name: str) -> bool:
