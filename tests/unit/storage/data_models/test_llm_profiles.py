@@ -87,6 +87,19 @@ def test_acp_profile_round_trips():
     assert p.acp_model == 'claude-opus-4-7'
 
 
+# ── AgentProfile validators ───────────────────────────────────────
+
+
+def test_acp_profile_requires_acp_server():
+    with pytest.raises(ValueError, match='acp_server is required'):
+        AgentProfile(agent_kind='acp')
+
+
+def test_openhands_profile_rejects_acp_fields():
+    with pytest.raises(ValueError, match='acp_server and acp_model must be None'):
+        AgentProfile(agent_kind='openhands', acp_server='claude-code')
+
+
 # ── Queries ───────────────────────────────────────────────────────
 
 

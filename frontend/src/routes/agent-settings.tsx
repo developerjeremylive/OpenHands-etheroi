@@ -212,9 +212,9 @@ export default function AgentSettingsScreen() {
               });
               await activateProfile.mutateAsync(name);
             } catch (err) {
-              // Best-effort: ACP settings already saved. Profile errors
-              // (e.g. cap reached) are surfaced on the Profiles page.
-              console.error("Failed to save ACP profile:", err);
+              // ACP settings already saved — profile save is best-effort.
+              const msg = retrieveAxiosErrorMessage(err as AxiosError);
+              displayErrorToast(msg || t(I18nKey.ERROR$GENERIC));
             }
             setAcpProfileName("");
           }
