@@ -24,7 +24,6 @@ from openhands.app_server.secrets.secrets_store import SecretsStore
 from openhands.app_server.settings.file_settings_store import FileSettingsStore
 from openhands.app_server.settings.llm_profiles import (
     MAX_PROFILES_PER_USER,
-    AgentProfile,
 )
 from openhands.app_server.settings.settings_models import Settings
 from openhands.app_server.settings.settings_router import _user_profile_locks
@@ -52,13 +51,13 @@ class _MockUserAuth(UserAuth):
         self._settings_store = settings_store
 
     async def get_user_id(self) -> str | None:
-        return "test-user"
+        return 'test-user'
 
     async def get_user_email(self) -> str | None:
-        return "test-email@example.com"
+        return 'test-email@example.com'
 
     async def get_access_token(self) -> SecretStr | None:
-        return SecretStr("test-token")
+        return SecretStr('test-token')
 
     async def get_provider_tokens(
         self,
@@ -91,7 +90,7 @@ class _MockUserAuth(UserAuth):
 
 @pytest.fixture
 def settings_store(tmp_path: Path) -> FileSettingsStore:
-    return FileSettingsStore(get_file_store("local", str(tmp_path)))
+    return FileSettingsStore(get_file_store('local', str(tmp_path)))
 
 
 @pytest.fixture
@@ -101,16 +100,16 @@ def test_client(settings_store):
     with (
         patch.dict(
             os.environ,
-            {"SESSION_API_KEY": "", "ALLOW_SHORT_CONTEXT_WINDOWS": "true"},
+            {'SESSION_API_KEY': '', 'ALLOW_SHORT_CONTEXT_WINDOWS': 'true'},
             clear=False,
         ),
-        patch("openhands.app_server.utils.dependencies._SESSION_API_KEY", None),
+        patch('openhands.app_server.utils.dependencies._SESSION_API_KEY', None),
         patch(
-            "openhands.app_server.user_auth.user_auth.UserAuth.get_instance",
+            'openhands.app_server.user_auth.user_auth.UserAuth.get_instance',
             return_value=auth,
         ),
         patch(
-            "openhands.app_server.settings.file_settings_store.FileSettingsStore.get_instance",
+            'openhands.app_server.settings.file_settings_store.FileSettingsStore.get_instance',
             AsyncMock(return_value=settings_store),
         ),
     ):
@@ -122,8 +121,8 @@ def _base_settings() -> Settings:
     return Settings(
         agent_settings=OpenHandsAgentSettings(
             llm=LLM(
-                model="openai/gpt-4o",
-                api_key=SecretStr("sk-current"),
+                model='openai/gpt-4o',
+                api_key=SecretStr('sk-current'),
             ),
         ),
     )
@@ -149,16 +148,16 @@ def _client_for_user(user_id: str, store: FileSettingsStore):
     with (
         patch.dict(
             os.environ,
-            {"SESSION_API_KEY": "", "ALLOW_SHORT_CONTEXT_WINDOWS": "true"},
+            {'SESSION_API_KEY': '', 'ALLOW_SHORT_CONTEXT_WINDOWS': 'true'},
             clear=False,
         ),
-        patch("openhands.app_server.utils.dependencies._SESSION_API_KEY", None),
+        patch('openhands.app_server.utils.dependencies._SESSION_API_KEY', None),
         patch(
-            "openhands.app_server.user_auth.user_auth.UserAuth.get_instance",
+            'openhands.app_server.user_auth.user_auth.UserAuth.get_instance',
             return_value=auth,
         ),
         patch(
-            "openhands.app_server.settings.file_settings_store.FileSettingsStore.get_instance",
+            'openhands.app_server.settings.file_settings_store.FileSettingsStore.get_instance',
             AsyncMock(return_value=store),
         ),
     ):
@@ -169,30 +168,30 @@ def _client_for_user(user_id: str, store: FileSettingsStore):
 
 
 def test_list_profiles_returns_empty_when_no_settings(test_client):
-    response = test_client.get("/api/v1/settings/profiles")
+    response = test_client.get('/api/v1/settings/profiles')
 
     assert response.status_code == 200
-    assert response.json() == {"profiles": [], "active_profile": None}
+    assert response.json() == {'profiles': [], 'active_profile': None}
 
 
 @pytest.mark.asyncio
 async def test_list_profiles_returns_saved_profiles(test_client, settings_store):
     settings = _base_settings()
     settings.llm_profiles.save(
-        "my-gpt4",
-        LLM(model="openai/gpt-4o", api_key=SecretStr("sk-1")),
+        'my-gpt4',
+        LLM(model='openai/gpt-4o', api_key=SecretStr('sk-1')),
     )
-    settings.llm_profiles.save("my-claude", LLM(model="anthropic/claude-opus-4"))
-    settings.llm_profiles.active = "my-claude"
+    settings.llm_profiles.save('my-claude', LLM(model='anthropic/claude-opus-4'))
+    settings.llm_profiles.active = 'my-claude'
     await _seed(settings_store, settings)
 
-    response = test_client.get("/api/v1/settings/profiles")
+    response = test_client.get('/api/v1/settings/profiles')
 
     assert response.status_code == 200
     body = response.json()
-    assert body["active_profile"] == "my-claude"
-    names = {p["name"] for p in body["profiles"]}
-    assert names == {"my-gpt4", "my-claude"}
+    assert body['active_profile'] == 'my-claude'
+    names = {p['name'] for p in body['profiles']}
+    assert names == {'my-gpt4', 'my-claude'}
 
 
 # ── GET /profiles/{name} ─────────────────────────────────────────
@@ -209,25 +208,25 @@ async def test_get_profile_returns_null_api_key_with_set_flag(
     """
     settings = _base_settings()
     settings.llm_profiles.save(
-        "p", LLM(model="openai/gpt-4o", api_key=SecretStr("sk-secret"))
+        'p', LLM(model='openai/gpt-4o', api_key=SecretStr('sk-secret'))
     )
     await _seed(settings_store, settings)
 
-    response = test_client.get("/api/v1/settings/profiles/p")
+    response = test_client.get('/api/v1/settings/profiles/p')
 
     assert response.status_code == 200
     body = response.json()
-    assert body["name"] == "p"
-    assert body["config"]["model"] == "openai/gpt-4o"
-    assert body["config"]["api_key"] is None
-    assert body["api_key_set"] is True
+    assert body['name'] == 'p'
+    assert body['config']['model'] == 'openai/gpt-4o'
+    assert body['config']['api_key'] is None
+    assert body['api_key_set'] is True
 
 
 def test_get_profile_returns_404_when_unknown(test_client):
-    response = test_client.get("/api/v1/settings/profiles/nope")
+    response = test_client.get('/api/v1/settings/profiles/nope')
 
     assert response.status_code == 404
-    assert "'nope'" in response.json()["detail"]
+    assert "'nope'" in response.json()['detail']
 
 
 # ── POST /profiles/{name} ────────────────────────────────────────
@@ -238,23 +237,23 @@ async def test_save_profile_with_explicit_llm_persists(test_client, settings_sto
     await _seed(settings_store, _base_settings())
 
     response = test_client.post(
-        "/api/v1/settings/profiles/my-new",
+        '/api/v1/settings/profiles/my-new',
         json={
-            "llm": {
-                "model": "anthropic/claude-opus-4",
-                "api_key": "sk-new",
+            'llm': {
+                'model': 'anthropic/claude-opus-4',
+                'api_key': 'sk-new',
             },
         },
     )
 
     assert response.status_code == 201
-    assert response.json()["name"] == "my-new"
+    assert response.json()['name'] == 'my-new'
 
     stored = await settings_store.load()
-    assert stored.llm_profiles.has("my-new")
-    saved_llm = stored.llm_profiles.get("my-new")
-    assert saved_llm.model == "anthropic/claude-opus-4"
-    assert saved_llm.api_key.get_secret_value() == "sk-new"
+    assert stored.llm_profiles.has('my-new')
+    saved_llm = stored.llm_profiles.get('my-new')
+    assert saved_llm.model == 'anthropic/claude-opus-4'
+    assert saved_llm.api_key.get_secret_value() == 'sk-new'
 
 
 @pytest.mark.asyncio
@@ -263,14 +262,14 @@ async def test_save_profile_snapshots_current_llm_when_no_body(
 ):
     await _seed(settings_store, _base_settings())
 
-    response = test_client.post("/api/v1/settings/profiles/snapshot", json={})
+    response = test_client.post('/api/v1/settings/profiles/snapshot', json={})
 
     assert response.status_code == 201
     stored = await settings_store.load()
-    snap = stored.llm_profiles.get("snapshot")
+    snap = stored.llm_profiles.get('snapshot')
     assert snap is not None
-    assert snap.model == "openai/gpt-4o"
-    assert snap.api_key.get_secret_value() == "sk-current"
+    assert snap.model == 'openai/gpt-4o'
+    assert snap.api_key.get_secret_value() == 'sk-current'
 
 
 @pytest.mark.asyncio
@@ -278,32 +277,32 @@ async def test_save_profile_without_secrets_clears_api_key(test_client, settings
     await _seed(settings_store, _base_settings())
 
     response = test_client.post(
-        "/api/v1/settings/profiles/no-key",
+        '/api/v1/settings/profiles/no-key',
         json={
-            "include_secrets": False,
-            "llm": {"model": "openai/gpt-4o", "api_key": "sk-abc"},
+            'include_secrets': False,
+            'llm': {'model': 'openai/gpt-4o', 'api_key': 'sk-abc'},
         },
     )
 
     assert response.status_code == 201
     stored = await settings_store.load()
-    assert stored.llm_profiles.get("no-key").api_key is None
+    assert stored.llm_profiles.get('no-key').api_key is None
 
 
 @pytest.mark.asyncio
 async def test_save_profile_overwrites_existing(test_client, settings_store):
     settings = _base_settings()
-    settings.llm_profiles.save("p", LLM(model="openai/gpt-4o"))
+    settings.llm_profiles.save('p', LLM(model='openai/gpt-4o'))
     await _seed(settings_store, settings)
 
     response = test_client.post(
-        "/api/v1/settings/profiles/p",
-        json={"llm": {"model": "anthropic/claude-opus-4"}},
+        '/api/v1/settings/profiles/p',
+        json={'llm': {'model': 'anthropic/claude-opus-4'}},
     )
 
     assert response.status_code == 201
     stored = await settings_store.load()
-    assert stored.llm_profiles.get("p").model == "anthropic/claude-opus-4"
+    assert stored.llm_profiles.get('p').model == 'anthropic/claude-opus-4'
 
 
 @pytest.mark.asyncio
@@ -317,25 +316,25 @@ async def test_save_overwrite_of_active_profile_clears_active(
     POST already enforces via ``reconcile_active_profile``.
     """
     settings = _base_settings()
-    settings.llm_profiles.save("p", LLM(model="openai/gpt-4o"))
-    settings.switch_to_profile("p")  # makes 'p' active *and* the running llm
+    settings.llm_profiles.save('p', LLM(model='openai/gpt-4o'))
+    settings.switch_to_profile('p')  # makes 'p' active *and* the running llm
     await _seed(settings_store, settings)
-    assert test_client.get("/api/v1/settings/profiles").json()["active_profile"] == "p"
+    assert test_client.get('/api/v1/settings/profiles').json()['active_profile'] == 'p'
 
     # Save a different config under the same name.
     response = test_client.post(
-        "/api/v1/settings/profiles/p",
-        json={"llm": {"model": "anthropic/claude-opus-4"}},
+        '/api/v1/settings/profiles/p',
+        json={'llm': {'model': 'anthropic/claude-opus-4'}},
     )
     assert response.status_code == 201
 
-    body = test_client.get("/api/v1/settings/profiles").json()
-    assert body["active_profile"] is None
+    body = test_client.get('/api/v1/settings/profiles').json()
+    assert body['active_profile'] is None
     # The saved profile reflects the new config; the active marker is gone
     # because agent_settings.llm still runs the previous one.
     stored = await settings_store.load()
-    assert stored.llm_profiles.get("p").model == "anthropic/claude-opus-4"
-    assert stored.agent_settings.llm.model == "openai/gpt-4o"
+    assert stored.llm_profiles.get('p').model == 'anthropic/claude-opus-4'
+    assert stored.agent_settings.llm.model == 'openai/gpt-4o'
 
 
 @pytest.mark.asyncio
@@ -347,18 +346,18 @@ async def test_save_overwrite_of_inactive_profile_preserves_active(
     only the active profile can diverge from agent_settings.llm.
     """
     settings = _base_settings()
-    settings.llm_profiles.save("active", LLM(model="openai/gpt-4o"))
-    settings.llm_profiles.save("other", LLM(model="openai/gpt-4o"))
-    settings.switch_to_profile("active")
+    settings.llm_profiles.save('active', LLM(model='openai/gpt-4o'))
+    settings.llm_profiles.save('other', LLM(model='openai/gpt-4o'))
+    settings.switch_to_profile('active')
     await _seed(settings_store, settings)
 
     test_client.post(
-        "/api/v1/settings/profiles/other",
-        json={"llm": {"model": "anthropic/claude-opus-4"}},
+        '/api/v1/settings/profiles/other',
+        json={'llm': {'model': 'anthropic/claude-opus-4'}},
     )
 
-    body = test_client.get("/api/v1/settings/profiles").json()
-    assert body["active_profile"] == "active"
+    body = test_client.get('/api/v1/settings/profiles').json()
+    assert body['active_profile'] == 'active'
 
 
 @pytest.mark.asyncio
@@ -367,8 +366,8 @@ async def test_save_profile_rejects_invalid_llm_with_422(test_client, settings_s
 
     # Missing required `model`; StrictLLM would also reject the unknown key.
     response = test_client.post(
-        "/api/v1/settings/profiles/bad",
-        json={"llm": {"not_a_real_llm_field": True}},
+        '/api/v1/settings/profiles/bad',
+        json={'llm': {'not_a_real_llm_field': True}},
     )
 
     assert response.status_code == 422
@@ -385,25 +384,25 @@ async def test_edit_profile_round_trip_preserves_api_key(test_client, settings_s
     """
     await _seed(settings_store, _base_settings())
     test_client.post(
-        "/api/v1/settings/profiles/p",
-        json={"llm": {"model": "openai/gpt-4o", "api_key": "REAL-KEY-42"}},
+        '/api/v1/settings/profiles/p',
+        json={'llm': {'model': 'openai/gpt-4o', 'api_key': 'REAL-KEY-42'}},
     )
 
-    fetched = test_client.get("/api/v1/settings/profiles/p").json()
-    fetched["config"]["model"] = "anthropic/claude-opus-4"  # user edits model
-    assert fetched["config"]["api_key"] is None  # GET returns null, not mask
+    fetched = test_client.get('/api/v1/settings/profiles/p').json()
+    fetched['config']['model'] = 'anthropic/claude-opus-4'  # user edits model
+    assert fetched['config']['api_key'] is None  # GET returns null, not mask
 
     # Round-trip via the ``profile`` field (supports the full AgentProfile shape
     # including agent_kind, acp_server, acp_model returned by GET).
     resp = test_client.post(
-        "/api/v1/settings/profiles/p", json={"profile": fetched["config"]}
+        '/api/v1/settings/profiles/p', json={'profile': fetched['config']}
     )
     assert resp.status_code == 201
 
     stored = await settings_store.load()
-    preserved = stored.llm_profiles.get("p")
-    assert preserved.model == "anthropic/claude-opus-4"
-    assert preserved.api_key.get_secret_value() == "REAL-KEY-42"
+    preserved = stored.llm_profiles.get('p')
+    assert preserved.model == 'anthropic/claude-opus-4'
+    assert preserved.api_key.get_secret_value() == 'REAL-KEY-42'
 
 
 @pytest.mark.asyncio
@@ -416,40 +415,40 @@ async def test_edit_profile_with_new_api_key_replaces_old(test_client, settings_
     """
     await _seed(settings_store, _base_settings())
     test_client.post(
-        "/api/v1/settings/profiles/p",
-        json={"llm": {"model": "openai/gpt-4o", "api_key": "OLD-KEY"}},
+        '/api/v1/settings/profiles/p',
+        json={'llm': {'model': 'openai/gpt-4o', 'api_key': 'OLD-KEY'}},
     )
 
     resp = test_client.post(
-        "/api/v1/settings/profiles/p",
-        json={"llm": {"model": "openai/gpt-4o", "api_key": "NEW-KEY"}},
+        '/api/v1/settings/profiles/p',
+        json={'llm': {'model': 'openai/gpt-4o', 'api_key': 'NEW-KEY'}},
     )
     assert resp.status_code == 201
 
     stored = await settings_store.load()
-    assert stored.llm_profiles.get("p").api_key.get_secret_value() == "NEW-KEY"
+    assert stored.llm_profiles.get('p').api_key.get_secret_value() == 'NEW-KEY'
 
 
 @pytest.mark.asyncio
 async def test_list_profiles_reports_api_key_set_per_row(test_client, settings_store):
     settings = _base_settings()
     settings.llm_profiles.save(
-        "with-key",
-        LLM(model="openai/gpt-4o", api_key=SecretStr("sk-abc")),
+        'with-key',
+        LLM(model='openai/gpt-4o', api_key=SecretStr('sk-abc')),
     )
     settings.llm_profiles.save(
-        "no-key",
-        LLM(model="ollama/llama3", base_url="http://localhost:11434"),
+        'no-key',
+        LLM(model='ollama/llama3', base_url='http://localhost:11434'),
     )
     await _seed(settings_store, settings)
 
     rows = {
-        p["name"]: p
-        for p in test_client.get("/api/v1/settings/profiles").json()["profiles"]
+        p['name']: p
+        for p in test_client.get('/api/v1/settings/profiles').json()['profiles']
     }
 
-    assert rows["with-key"]["api_key_set"] is True
-    assert rows["no-key"]["api_key_set"] is False
+    assert rows['with-key']['api_key_set'] is True
+    assert rows['no-key']['api_key_set'] is False
 
 
 @pytest.mark.asyncio
@@ -457,22 +456,22 @@ async def test_api_key_set_is_false_for_empty_secret(test_client, settings_store
     """``SecretStr('')`` is *not* a stored key — the UI must not claim one is."""
     settings = _base_settings()
     settings.llm_profiles.save(
-        "blank", LLM(model="openai/gpt-4o", api_key=SecretStr(""))
+        'blank', LLM(model='openai/gpt-4o', api_key=SecretStr(''))
     )
     settings.llm_profiles.save(
-        "whitespace", LLM(model="openai/gpt-4o", api_key=SecretStr("   "))
+        'whitespace', LLM(model='openai/gpt-4o', api_key=SecretStr('   '))
     )
     await _seed(settings_store, settings)
 
     rows = {
-        p["name"]: p
-        for p in test_client.get("/api/v1/settings/profiles").json()["profiles"]
+        p['name']: p
+        for p in test_client.get('/api/v1/settings/profiles').json()['profiles']
     }
-    assert rows["blank"]["api_key_set"] is False
-    assert rows["whitespace"]["api_key_set"] is False
+    assert rows['blank']['api_key_set'] is False
+    assert rows['whitespace']['api_key_set'] is False
 
-    detail = test_client.get("/api/v1/settings/profiles/blank").json()
-    assert detail["api_key_set"] is False
+    detail = test_client.get('/api/v1/settings/profiles/blank').json()
+    assert detail['api_key_set'] is False
 
 
 @pytest.mark.asyncio
@@ -481,8 +480,8 @@ async def test_save_profile_rejects_unknown_llm_field(test_client, settings_stor
     await _seed(settings_store, _base_settings())
 
     response = test_client.post(
-        "/api/v1/settings/profiles/typo",
-        json={"llm": {"model": "openai/gpt-4o", "custom_header": "x"}},
+        '/api/v1/settings/profiles/typo',
+        json={'llm': {'model': 'openai/gpt-4o', 'custom_header': 'x'}},
     )
 
     assert response.status_code == 422
@@ -494,24 +493,24 @@ async def test_save_profile_rejects_unknown_llm_field(test_client, settings_stor
 @pytest.mark.asyncio
 async def test_delete_profile_removes_it(test_client, settings_store):
     settings = _base_settings()
-    settings.llm_profiles.save("p", LLM(model="openai/gpt-4o"))
+    settings.llm_profiles.save('p', LLM(model='openai/gpt-4o'))
     await _seed(settings_store, settings)
 
-    response = test_client.delete("/api/v1/settings/profiles/p")
+    response = test_client.delete('/api/v1/settings/profiles/p')
 
     assert response.status_code == 200
     stored = await settings_store.load()
-    assert not stored.llm_profiles.has("p")
+    assert not stored.llm_profiles.has('p')
 
 
 @pytest.mark.asyncio
 async def test_delete_profile_is_idempotent(test_client, settings_store):
     await _seed(settings_store, _base_settings())
 
-    response = test_client.delete("/api/v1/settings/profiles/never-existed")
+    response = test_client.delete('/api/v1/settings/profiles/never-existed')
 
     assert response.status_code == 200
-    assert response.json()["name"] == "never-existed"
+    assert response.json()['name'] == 'never-existed'
 
 
 # ── POST /profiles/{name}/activate ───────────────────────────────
@@ -521,31 +520,31 @@ async def test_delete_profile_is_idempotent(test_client, settings_store):
 async def test_activate_profile_updates_agent_llm(test_client, settings_store):
     settings = _base_settings()
     settings.llm_profiles.save(
-        "my-claude",
+        'my-claude',
         LLM(
-            model="anthropic/claude-opus-4",
-            api_key=SecretStr("sk-claude"),
+            model='anthropic/claude-opus-4',
+            api_key=SecretStr('sk-claude'),
         ),
     )
     await _seed(settings_store, settings)
 
-    response = test_client.post("/api/v1/settings/profiles/my-claude/activate")
+    response = test_client.post('/api/v1/settings/profiles/my-claude/activate')
 
     assert response.status_code == 200
     body = response.json()
-    assert body["name"] == "my-claude"
-    assert body["model"] == "anthropic/claude-opus-4"
+    assert body['name'] == 'my-claude'
+    assert body['model'] == 'anthropic/claude-opus-4'
 
     stored = await settings_store.load()
-    assert stored.agent_settings.llm.model == "anthropic/claude-opus-4"
-    assert stored.llm_profiles.active == "my-claude"
+    assert stored.agent_settings.llm.model == 'anthropic/claude-opus-4'
+    assert stored.llm_profiles.active == 'my-claude'
 
 
 def test_activate_profile_returns_404_when_unknown(test_client):
-    response = test_client.post("/api/v1/settings/profiles/ghost/activate")
+    response = test_client.post('/api/v1/settings/profiles/ghost/activate')
 
     assert response.status_code == 404
-    assert "'ghost'" in response.json()["detail"]
+    assert "'ghost'" in response.json()['detail']
 
 
 @pytest.mark.asyncio
@@ -553,12 +552,12 @@ async def test_activate_profile_applies_base_url_fixup(test_client, settings_sto
     """Activating a profile with no base_url should get the provider default."""
     settings = _base_settings()
     settings.llm_profiles.save(
-        "oh-profile",
-        LLM(model="openhands/claude-sonnet-4-20250514"),
+        'oh-profile',
+        LLM(model='openhands/claude-sonnet-4-20250514'),
     )
     await _seed(settings_store, settings)
 
-    response = test_client.post("/api/v1/settings/profiles/oh-profile/activate")
+    response = test_client.post('/api/v1/settings/profiles/oh-profile/activate')
     assert response.status_code == 200
 
     stored = await settings_store.load()
@@ -580,16 +579,16 @@ async def test_activate_does_not_mutate_saved_profile_base_url(
     """
     settings = _base_settings()
     settings.llm_profiles.save(
-        "custom",
-        LLM(model="openai/gpt-4o", base_url="https://custom.example.com"),
+        'custom',
+        LLM(model='openai/gpt-4o', base_url='https://custom.example.com'),
     )
     await _seed(settings_store, settings)
 
-    response = test_client.post("/api/v1/settings/profiles/custom/activate")
+    response = test_client.post('/api/v1/settings/profiles/custom/activate')
     assert response.status_code == 200
 
     stored = await settings_store.load()
-    assert stored.llm_profiles.get("custom").base_url == "https://custom.example.com"
+    assert stored.llm_profiles.get('custom').base_url == 'https://custom.example.com'
 
 
 # ── POST /profiles/{name}/rename ─────────────────────────────────
@@ -601,42 +600,42 @@ async def test_rename_profile_renames_and_preserves_api_key(
 ):
     settings = _base_settings()
     settings.llm_profiles.save(
-        "old",
-        LLM(model="openai/gpt-4o", api_key=SecretStr("sk-keep")),
+        'old',
+        LLM(model='openai/gpt-4o', api_key=SecretStr('sk-keep')),
     )
     await _seed(settings_store, settings)
 
     response = test_client.post(
-        "/api/v1/settings/profiles/old/rename",
-        json={"new_name": "new"},
+        '/api/v1/settings/profiles/old/rename',
+        json={'new_name': 'new'},
     )
 
     assert response.status_code == 200
     body = response.json()
-    assert body["name"] == "new"
+    assert body['name'] == 'new'
 
     stored = await settings_store.load()
-    assert stored.llm_profiles.get("old") is None
-    renamed = stored.llm_profiles.get("new")
+    assert stored.llm_profiles.get('old') is None
+    renamed = stored.llm_profiles.get('new')
     assert renamed is not None
-    assert renamed.api_key.get_secret_value() == "sk-keep"
+    assert renamed.api_key.get_secret_value() == 'sk-keep'
 
 
 @pytest.mark.asyncio
 async def test_rename_profile_preserves_active_flag(test_client, settings_store):
     settings = _base_settings()
-    settings.llm_profiles.save("p", LLM(model="openai/gpt-4o"))
-    settings.llm_profiles.active = "p"
+    settings.llm_profiles.save('p', LLM(model='openai/gpt-4o'))
+    settings.llm_profiles.active = 'p'
     await _seed(settings_store, settings)
 
     response = test_client.post(
-        "/api/v1/settings/profiles/p/rename",
-        json={"new_name": "q"},
+        '/api/v1/settings/profiles/p/rename',
+        json={'new_name': 'q'},
     )
     assert response.status_code == 200
 
     stored = await settings_store.load()
-    assert stored.llm_profiles.active == "q"
+    assert stored.llm_profiles.active == 'q'
 
 
 @pytest.mark.asyncio
@@ -644,12 +643,12 @@ async def test_rename_profile_returns_404_when_unknown(test_client, settings_sto
     await _seed(settings_store, _base_settings())
 
     response = test_client.post(
-        "/api/v1/settings/profiles/ghost/rename",
-        json={"new_name": "new"},
+        '/api/v1/settings/profiles/ghost/rename',
+        json={'new_name': 'new'},
     )
 
     assert response.status_code == 404
-    assert "'ghost'" in response.json()["detail"]
+    assert "'ghost'" in response.json()['detail']
 
 
 @pytest.mark.asyncio
@@ -657,49 +656,49 @@ async def test_rename_profile_returns_409_when_target_exists(
     test_client, settings_store
 ):
     settings = _base_settings()
-    settings.llm_profiles.save("a", LLM(model="openai/gpt-4o"))
-    settings.llm_profiles.save("b", LLM(model="anthropic/claude-opus-4"))
+    settings.llm_profiles.save('a', LLM(model='openai/gpt-4o'))
+    settings.llm_profiles.save('b', LLM(model='anthropic/claude-opus-4'))
     await _seed(settings_store, settings)
 
     response = test_client.post(
-        "/api/v1/settings/profiles/a/rename",
-        json={"new_name": "b"},
+        '/api/v1/settings/profiles/a/rename',
+        json={'new_name': 'b'},
     )
 
     assert response.status_code == 409
-    assert "'b'" in response.json()["detail"]
+    assert "'b'" in response.json()['detail']
 
     # Both originals should be intact after the failed rename.
     stored = await settings_store.load()
-    assert stored.llm_profiles.has("a")
-    assert stored.llm_profiles.has("b")
+    assert stored.llm_profiles.has('a')
+    assert stored.llm_profiles.has('b')
 
 
 @pytest.mark.asyncio
 async def test_rename_profile_to_same_name_is_noop(test_client, settings_store):
     settings = _base_settings()
-    settings.llm_profiles.save("p", LLM(model="openai/gpt-4o"))
+    settings.llm_profiles.save('p', LLM(model='openai/gpt-4o'))
     await _seed(settings_store, settings)
 
     response = test_client.post(
-        "/api/v1/settings/profiles/p/rename",
-        json={"new_name": "p"},
+        '/api/v1/settings/profiles/p/rename',
+        json={'new_name': 'p'},
     )
 
     assert response.status_code == 200
     stored = await settings_store.load()
-    assert stored.llm_profiles.has("p")
+    assert stored.llm_profiles.has('p')
 
 
 @pytest.mark.asyncio
 async def test_rename_profile_rejects_invalid_new_name(test_client, settings_store):
     settings = _base_settings()
-    settings.llm_profiles.save("p", LLM(model="openai/gpt-4o"))
+    settings.llm_profiles.save('p', LLM(model='openai/gpt-4o'))
     await _seed(settings_store, settings)
 
     response = test_client.post(
-        "/api/v1/settings/profiles/p/rename",
-        json={"new_name": "has space"},
+        '/api/v1/settings/profiles/p/rename',
+        json={'new_name': 'has space'},
     )
 
     assert response.status_code == 422
@@ -709,18 +708,18 @@ async def test_rename_profile_rejects_invalid_new_name(test_client, settings_sto
 
 
 @pytest.mark.parametrize(
-    "bad_name",
+    'bad_name',
     [
-        "a" * 65,  # too long
-        "with space",  # disallowed char
-        "with/slash",  # slash splits the path → endpoint not matched
-        "weird$chars",  # disallowed char
+        'a' * 65,  # too long
+        'with space',  # disallowed char
+        'with/slash',  # slash splits the path → endpoint not matched
+        'weird$chars',  # disallowed char
     ],
 )
 def test_save_profile_rejects_invalid_name(test_client, bad_name):
     response = test_client.post(
-        f"/api/v1/settings/profiles/{bad_name}",
-        json={"llm": {"model": "openai/gpt-4o"}},
+        f'/api/v1/settings/profiles/{bad_name}',
+        json={'llm': {'model': 'openai/gpt-4o'}},
     )
     # Invalid chars/length → 422 from Path validation; slash → 404/405 routing miss.
     assert response.status_code in (404, 405, 422)
@@ -733,33 +732,33 @@ def test_save_profile_rejects_invalid_name(test_client, bad_name):
 async def test_save_profile_returns_409_past_limit(test_client, settings_store):
     settings = _base_settings()
     for i in range(MAX_PROFILES_PER_USER):
-        settings.llm_profiles.save(f"p{i}", LLM(model="openai/gpt-4o"))
+        settings.llm_profiles.save(f'p{i}', LLM(model='openai/gpt-4o'))
     await _seed(settings_store, settings)
 
     response = test_client.post(
-        "/api/v1/settings/profiles/one-too-many",
-        json={"llm": {"model": "openai/gpt-4o"}},
+        '/api/v1/settings/profiles/one-too-many',
+        json={'llm': {'model': 'openai/gpt-4o'}},
     )
 
     assert response.status_code == 409
-    assert "limit" in response.json()["detail"].lower()
+    assert 'limit' in response.json()['detail'].lower()
 
 
 @pytest.mark.asyncio
 async def test_save_profile_at_limit_can_still_overwrite(test_client, settings_store):
     settings = _base_settings()
     for i in range(MAX_PROFILES_PER_USER):
-        settings.llm_profiles.save(f"p{i}", LLM(model="openai/gpt-4o"))
+        settings.llm_profiles.save(f'p{i}', LLM(model='openai/gpt-4o'))
     await _seed(settings_store, settings)
 
     response = test_client.post(
-        "/api/v1/settings/profiles/p0",
-        json={"llm": {"model": "anthropic/claude-opus-4"}},
+        '/api/v1/settings/profiles/p0',
+        json={'llm': {'model': 'anthropic/claude-opus-4'}},
     )
 
     assert response.status_code == 201
     stored = await settings_store.load()
-    assert stored.llm_profiles.get("p0").model == "anthropic/claude-opus-4"
+    assert stored.llm_profiles.get('p0').model == 'anthropic/claude-opus-4'
 
 
 # ── Orphan active auto-heals ─────────────────────────────────────
@@ -772,15 +771,15 @@ async def test_list_profiles_clears_orphan_active(test_client, settings_store):
     self-heal on the next load — ``active_profile`` is reported as None.
     """
     settings = _base_settings()
-    settings.llm_profiles.save("real", LLM(model="openai/gpt-4o"))
+    settings.llm_profiles.save('real', LLM(model='openai/gpt-4o'))
     # Bypass the invariant validator to persist a corrupt state.
-    object.__setattr__(settings.llm_profiles, "active", "ghost")
+    object.__setattr__(settings.llm_profiles, 'active', 'ghost')
     await _seed(settings_store, settings)
 
-    response = test_client.get("/api/v1/settings/profiles")
+    response = test_client.get('/api/v1/settings/profiles')
 
     assert response.status_code == 200
-    assert response.json()["active_profile"] is None
+    assert response.json()['active_profile'] is None
 
 
 # ── Real-world scenarios ─────────────────────────────────────────
@@ -795,7 +794,7 @@ async def test_list_profiles_clears_orphan_active(test_client, settings_store):
 # Scenario 4 — The profile-count cap frees a slot when a profile is deleted
 
 
-_SECRET = "sk-PROBE-MUST-NOT-LEAK"
+_SECRET = 'sk-PROBE-MUST-NOT-LEAK'
 
 
 @pytest.mark.asyncio
@@ -812,16 +811,16 @@ async def test_api_key_never_leaks_across_response_paths(test_client, settings_s
     await _seed(settings_store, _base_settings())
 
     save = test_client.post(
-        "/api/v1/settings/profiles/leak-check",
-        json={"llm": {"model": "openai/gpt-4o", "api_key": _SECRET}},
+        '/api/v1/settings/profiles/leak-check',
+        json={'llm': {'model': 'openai/gpt-4o', 'api_key': _SECRET}},
     )
     assert save.status_code == 201 and _SECRET not in save.text
-    assert _SECRET not in test_client.get("/api/v1/settings/profiles/leak-check").text
+    assert _SECRET not in test_client.get('/api/v1/settings/profiles/leak-check').text
     assert (
         _SECRET
-        not in test_client.post("/api/v1/settings/profiles/leak-check/activate").text
+        not in test_client.post('/api/v1/settings/profiles/leak-check/activate').text
     )
-    assert _SECRET not in test_client.get("/api/v1/settings").text
+    assert _SECRET not in test_client.get('/api/v1/settings').text
 
 
 @pytest.mark.asyncio
@@ -837,18 +836,18 @@ async def test_journey_direct_llm_edit_clears_active(test_client, settings_store
     """
     await _seed(settings_store, _base_settings())
     test_client.post(
-        "/api/v1/settings/profiles/j",
-        json={"llm": {"model": "openai/gpt-4o"}},
+        '/api/v1/settings/profiles/j',
+        json={'llm': {'model': 'openai/gpt-4o'}},
     )
-    test_client.post("/api/v1/settings/profiles/j/activate")
-    assert test_client.get("/api/v1/settings/profiles").json()["active_profile"] == "j"
+    test_client.post('/api/v1/settings/profiles/j/activate')
+    assert test_client.get('/api/v1/settings/profiles').json()['active_profile'] == 'j'
 
     test_client.post(
-        "/api/v1/settings",
-        json={"agent_settings_diff": {"llm": {"model": "anthropic/claude-opus-4"}}},
+        '/api/v1/settings',
+        json={'agent_settings_diff': {'llm': {'model': 'anthropic/claude-opus-4'}}},
     )
 
-    assert test_client.get("/api/v1/settings/profiles").json()["active_profile"] is None
+    assert test_client.get('/api/v1/settings/profiles').json()['active_profile'] is None
 
 
 @pytest.mark.asyncio
@@ -867,18 +866,18 @@ async def test_main_settings_endpoint_ignores_llm_profiles_payload(
     await _seed(settings_store, _base_settings())
 
     resp = test_client.post(
-        "/api/v1/settings",
+        '/api/v1/settings',
         json={
-            "llm_profiles": {
-                "profiles": {"ATTACKER": {"model": "openai/gpt-4o"}},
-                "active": "ATTACKER",
+            'llm_profiles': {
+                'profiles': {'ATTACKER': {'model': 'openai/gpt-4o'}},
+                'active': 'ATTACKER',
             },
         },
     )
 
     assert resp.status_code == 200  # silently ignored, not crashed
-    listing = test_client.get("/api/v1/settings/profiles").json()
-    assert "ATTACKER" not in {p["name"] for p in listing["profiles"]}
+    listing = test_client.get('/api/v1/settings/profiles').json()
+    assert 'ATTACKER' not in {p['name'] for p in listing['profiles']}
 
 
 @pytest.mark.asyncio
@@ -894,21 +893,21 @@ async def test_delete_active_profile_clears_active_and_allows_recovery(
     """
     await _seed(settings_store, _base_settings())
     test_client.post(
-        "/api/v1/settings/profiles/A",
-        json={"llm": {"model": "openai/gpt-4o"}},
+        '/api/v1/settings/profiles/A',
+        json={'llm': {'model': 'openai/gpt-4o'}},
     )
-    test_client.post("/api/v1/settings/profiles/A/activate")
+    test_client.post('/api/v1/settings/profiles/A/activate')
 
-    test_client.delete("/api/v1/settings/profiles/A")
+    test_client.delete('/api/v1/settings/profiles/A')
 
-    assert test_client.get("/api/v1/settings/profiles").json()["active_profile"] is None
+    assert test_client.get('/api/v1/settings/profiles').json()['active_profile'] is None
 
     # Recovery: save + activate a replacement.
     test_client.post(
-        "/api/v1/settings/profiles/B",
-        json={"llm": {"model": "anthropic/claude-opus-4"}},
+        '/api/v1/settings/profiles/B',
+        json={'llm': {'model': 'anthropic/claude-opus-4'}},
     )
-    assert test_client.post("/api/v1/settings/profiles/B/activate").status_code == 200
+    assert test_client.post('/api/v1/settings/profiles/B/activate').status_code == 200
 
 
 @pytest.mark.asyncio
@@ -923,23 +922,23 @@ async def test_switching_between_profiles_updates_active_and_model(
     """
     await _seed(settings_store, _base_settings())
     test_client.post(
-        "/api/v1/settings/profiles/A",
-        json={"llm": {"model": "openai/gpt-4o"}},
+        '/api/v1/settings/profiles/A',
+        json={'llm': {'model': 'openai/gpt-4o'}},
     )
     test_client.post(
-        "/api/v1/settings/profiles/B",
-        json={"llm": {"model": "anthropic/claude-opus-4"}},
+        '/api/v1/settings/profiles/B',
+        json={'llm': {'model': 'anthropic/claude-opus-4'}},
     )
 
-    test_client.post("/api/v1/settings/profiles/A/activate")
-    s1 = test_client.get("/api/v1/settings").json()
-    assert s1["agent_settings"]["llm"]["model"] == "openai/gpt-4o"
-    assert test_client.get("/api/v1/settings/profiles").json()["active_profile"] == "A"
+    test_client.post('/api/v1/settings/profiles/A/activate')
+    s1 = test_client.get('/api/v1/settings').json()
+    assert s1['agent_settings']['llm']['model'] == 'openai/gpt-4o'
+    assert test_client.get('/api/v1/settings/profiles').json()['active_profile'] == 'A'
 
-    test_client.post("/api/v1/settings/profiles/B/activate")
-    s2 = test_client.get("/api/v1/settings").json()
-    assert s2["agent_settings"]["llm"]["model"] == "anthropic/claude-opus-4"
-    assert test_client.get("/api/v1/settings/profiles").json()["active_profile"] == "B"
+    test_client.post('/api/v1/settings/profiles/B/activate')
+    s2 = test_client.get('/api/v1/settings').json()
+    assert s2['agent_settings']['llm']['model'] == 'anthropic/claude-opus-4'
+    assert test_client.get('/api/v1/settings/profiles').json()['active_profile'] == 'B'
 
 
 @pytest.mark.asyncio
@@ -953,26 +952,26 @@ async def test_profiles_are_isolated_between_users(tmp_path_factory):
     data).
     """
     store_a = FileSettingsStore(
-        get_file_store("local", str(tmp_path_factory.mktemp("alice")))
+        get_file_store('local', str(tmp_path_factory.mktemp('alice')))
     )
     store_b = FileSettingsStore(
-        get_file_store("local", str(tmp_path_factory.mktemp("bob")))
+        get_file_store('local', str(tmp_path_factory.mktemp('bob')))
     )
     await store_a.store(_base_settings())
     await store_b.store(_base_settings())
 
-    with _client_for_user("alice", store_a) as ca:
+    with _client_for_user('alice', store_a) as ca:
         assert (
             ca.post(
-                "/api/v1/settings/profiles/alice-only",
-                json={"llm": {"model": "openai/gpt-4o"}},
+                '/api/v1/settings/profiles/alice-only',
+                json={'llm': {'model': 'openai/gpt-4o'}},
             ).status_code
             == 201
         )
 
-    with _client_for_user("bob", store_b) as cb:
-        body = cb.get("/api/v1/settings/profiles").json()
-        assert "alice-only" not in {p["name"] for p in body["profiles"]}
+    with _client_for_user('bob', store_b) as cb:
+        body = cb.get('/api/v1/settings/profiles').json()
+        assert 'alice-only' not in {p['name'] for p in body['profiles']}
 
 
 @pytest.mark.asyncio
@@ -986,23 +985,23 @@ async def test_cap_frees_after_delete(test_client, settings_store):
     """
     settings = _base_settings()
     for i in range(MAX_PROFILES_PER_USER):
-        settings.llm_profiles.save(f"p{i}", LLM(model="openai/gpt-4o"))
+        settings.llm_profiles.save(f'p{i}', LLM(model='openai/gpt-4o'))
     await _seed(settings_store, settings)
 
     assert (
         test_client.post(
-            "/api/v1/settings/profiles/over",
-            json={"llm": {"model": "openai/gpt-4o"}},
+            '/api/v1/settings/profiles/over',
+            json={'llm': {'model': 'openai/gpt-4o'}},
         ).status_code
         == 409
     )
 
-    test_client.delete("/api/v1/settings/profiles/p0")
+    test_client.delete('/api/v1/settings/profiles/p0')
 
     assert (
         test_client.post(
-            "/api/v1/settings/profiles/over",
-            json={"llm": {"model": "openai/gpt-4o"}},
+            '/api/v1/settings/profiles/over',
+            json={'llm': {'model': 'openai/gpt-4o'}},
         ).status_code
         == 201
     )
@@ -1028,22 +1027,22 @@ async def test_concurrent_writes_all_persist(tmp_path: Path):
         save_profile,
     )
 
-    store = FileSettingsStore(get_file_store("local", str(tmp_path)))
+    store = FileSettingsStore(get_file_store('local', str(tmp_path)))
     await store.store(_base_settings())
 
     async def _save_one(i: int) -> None:
         await save_profile(
-            name=f"p{i}",
+            name=f'p{i}',
             request=SaveProfileRequest.model_validate(
-                {"llm": {"model": "openai/gpt-4o"}}
+                {'llm': {'model': 'openai/gpt-4o'}}
             ),
-            user_id="same-user",
+            user_id='same-user',
             settings_store=store,
         )
 
     await asyncio.gather(*(_save_one(i) for i in range(10)))
 
     stored = await store.load()
-    assert {p["name"] for p in stored.llm_profiles.summaries()} == {
-        f"p{i}" for i in range(10)
+    assert {p['name'] for p in stored.llm_profiles.summaries()} == {
+        f'p{i}' for i in range(10)
     }

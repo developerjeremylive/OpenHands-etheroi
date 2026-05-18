@@ -25,52 +25,52 @@ from openhands.sdk.settings.model import CondenserSettings, VerificationSettings
 
 def test_settings_handles_sensitive_data():
     settings = Settings(
-        language="en",
+        language='en',
         agent_settings=OpenHandsAgentSettings(
-            agent="test-agent",
+            agent='test-agent',
             llm=LLM(
-                model="test-model",
-                api_key=SecretStr("test-key"),
-                base_url="https://test.example.com",
+                model='test-model',
+                api_key=SecretStr('test-key'),
+                base_url='https://test.example.com',
             ),
         ),
         conversation_settings=ConversationSettings(
             max_iterations=100,
-            security_analyzer="llm",
+            security_analyzer='llm',
             confirmation_mode=True,
         ),
         remote_runtime_resource_factor=2,
     )
 
     llm_api_key = settings.agent_settings.llm.api_key
-    assert str(llm_api_key) == "**********"
-    assert llm_api_key.get_secret_value() == "test-key"
+    assert str(llm_api_key) == '**********'
+    assert llm_api_key.get_secret_value() == 'test-key'
 
 
 def test_settings_loads_persisted_settings_via_sdk_loaders():
-    loaded_agent_settings = OpenHandsAgentSettings(agent="migrated-agent")
+    loaded_agent_settings = OpenHandsAgentSettings(agent='migrated-agent')
     loaded_conversation_settings = ConversationSettings(max_iterations=77)
 
     with (
         patch.object(
             settings_module,
-            "validate_agent_settings",
+            'validate_agent_settings',
             return_value=loaded_agent_settings,
         ) as agent_loader,
         patch.object(
             ConversationSettings,
-            "from_persisted",
+            'from_persisted',
             return_value=loaded_conversation_settings,
         ) as conversation_loader,
     ):
         settings = Settings(
-            agent_settings={"legacy": True},
-            conversation_settings={"legacy": True},
+            agent_settings={'legacy': True},
+            conversation_settings={'legacy': True},
         )
 
-    agent_loader.assert_called_once_with({"legacy": True})
-    conversation_loader.assert_called_once_with({"legacy": True})
-    assert settings.agent_settings.agent == "migrated-agent"
+    agent_loader.assert_called_once_with({'legacy': True})
+    conversation_loader.assert_called_once_with({'legacy': True})
+    assert settings.agent_settings.agent == 'migrated-agent'
     assert settings.conversation_settings.max_iterations == 77
 
 
@@ -78,15 +78,15 @@ def test_settings_update_deep_merges_agent_settings():
     """Updating agent_settings with a partial dict must not overwrite sibling sub-fields."""
     settings = Settings(
         agent_settings=OpenHandsAgentSettings(
-            llm=LLM(model="existing-model", api_key=SecretStr("existing-key")),
+            llm=LLM(model='existing-model', api_key=SecretStr('existing-key')),
             condenser=CondenserSettings(enabled=True, max_size=200),
         ),
     )
 
-    settings.update({"agent_settings_diff": {"condenser": {"max_size": 300}}})
+    settings.update({'agent_settings_diff': {'condenser': {'max_size': 300}}})
 
-    assert settings.agent_settings.llm.model == "existing-model"
-    assert settings.agent_settings.llm.api_key.get_secret_value() == "existing-key"
+    assert settings.agent_settings.llm.model == 'existing-model'
+    assert settings.agent_settings.llm.api_key.get_secret_value() == 'existing-key'
     assert settings.agent_settings.condenser.max_size == 300
     assert settings.agent_settings.condenser.enabled is True
 
@@ -95,65 +95,65 @@ def test_settings_preserve_agent_settings():
     settings = Settings(
         agent_settings=OpenHandsAgentSettings(
             llm=LLM(
-                model="test-model",
-                api_key=SecretStr("test-key"),
-                litellm_extra_body={"metadata": {"tier": "pro"}},
+                model='test-model',
+                api_key=SecretStr('test-key'),
+                litellm_extra_body={'metadata': {'tier': 'pro'}},
             ),
             verification=VerificationSettings(
                 critic_enabled=True,
-                critic_mode="all_actions",
+                critic_mode='all_actions',
             ),
         ),
     )
 
-    assert settings.agent_settings.llm.api_key.get_secret_value() == "test-key"
+    assert settings.agent_settings.llm.api_key.get_secret_value() == 'test-key'
     dump = settings.agent_settings.model_dump(
-        mode="json", context={"expose_secrets": True}
+        mode='json', context={'expose_secrets': True}
     )
 
-    assert dump["schema_version"] == AGENT_SETTINGS_SCHEMA_VERSION
-    assert dump["llm"]["model"] == "test-model"
-    assert dump["llm"]["api_key"] == "test-key"
-    assert dump["verification"]["critic_enabled"] is True
-    assert dump["verification"]["critic_mode"] == "all_actions"
-    assert dump["llm"]["litellm_extra_body"] == {"metadata": {"tier": "pro"}}
+    assert dump['schema_version'] == AGENT_SETTINGS_SCHEMA_VERSION
+    assert dump['llm']['model'] == 'test-model'
+    assert dump['llm']['api_key'] == 'test-key'
+    assert dump['verification']['critic_enabled'] is True
+    assert dump['verification']['critic_mode'] == 'all_actions'
+    assert dump['llm']['litellm_extra_body'] == {'metadata': {'tier': 'pro'}}
 
 
 def test_settings_to_agent_settings_uses_agent_vals():
     settings = Settings(
         agent_settings=OpenHandsAgentSettings(
             llm=LLM(
-                model="sdk-model",
-                base_url="https://sdk.example.com",
-                litellm_extra_body={"metadata": {"tier": "enterprise"}},
+                model='sdk-model',
+                base_url='https://sdk.example.com',
+                litellm_extra_body={'metadata': {'tier': 'enterprise'}},
             ),
             condenser=CondenserSettings(enabled=False, max_size=88),
             verification=VerificationSettings(
-                critic_enabled=True, critic_mode="all_actions"
+                critic_enabled=True, critic_mode='all_actions'
             ),
         ),
     )
 
     agent_settings = settings.to_agent_settings()
 
-    assert agent_settings.llm.model == "sdk-model"
-    assert agent_settings.llm.base_url == "https://sdk.example.com"
-    assert agent_settings.llm.litellm_extra_body == {"metadata": {"tier": "enterprise"}}
+    assert agent_settings.llm.model == 'sdk-model'
+    assert agent_settings.llm.base_url == 'https://sdk.example.com'
+    assert agent_settings.llm.litellm_extra_body == {'metadata': {'tier': 'enterprise'}}
     assert agent_settings.condenser.enabled is False
     assert agent_settings.condenser.max_size == 88
     assert agent_settings.verification.critic_enabled is True
-    assert agent_settings.verification.critic_mode == "all_actions"
+    assert agent_settings.verification.critic_mode == 'all_actions'
 
 
 def test_settings_agent_settings_keeps_sdk_mcp_shape_canonical():
     settings = Settings(
         agent_settings=OpenHandsAgentSettings(
-            llm=LLM(model="sdk-model"),
+            llm=LLM(model='sdk-model'),
             mcp_config=MCPConfig(
                 mcpServers={
-                    "sse_server": {
-                        "url": "https://example.com/sse",
-                        "transport": "sse",
+                    'sse_server': {
+                        'url': 'https://example.com/sse',
+                        'transport': 'sse',
                     }
                 },
             ),
@@ -163,27 +163,27 @@ def test_settings_agent_settings_keeps_sdk_mcp_shape_canonical():
     mcp_config = settings.agent_settings.mcp_config
     assert mcp_config is not None
     servers = mcp_config.mcpServers
-    assert "sse_server" in servers
-    assert servers["sse_server"].transport == "sse"
-    assert servers["sse_server"].url == "https://example.com/sse"
+    assert 'sse_server' in servers
+    assert servers['sse_server'].transport == 'sse'
+    assert servers['sse_server'].url == 'https://example.com/sse'
 
-    api_values = settings.agent_settings.model_dump(mode="json")
-    assert "sse_server" in api_values["mcp_config"]["mcpServers"]
+    api_values = settings.agent_settings.model_dump(mode='json')
+    assert 'sse_server' in api_values['mcp_config']['mcpServers']
 
 
 def test_settings_update_mcp_config():
     settings = Settings(
-        agent_settings=OpenHandsAgentSettings(llm=LLM(model="sdk-model"))
+        agent_settings=OpenHandsAgentSettings(llm=LLM(model='sdk-model'))
     )
 
     settings.update(
         {
-            "agent_settings_diff": {
-                "mcp_config": {
-                    "mcpServers": {
-                        "custom": {
-                            "transport": "http",
-                            "url": "https://example.com/mcp",
+            'agent_settings_diff': {
+                'mcp_config': {
+                    'mcpServers': {
+                        'custom': {
+                            'transport': 'http',
+                            'url': 'https://example.com/mcp',
                         }
                     }
                 }
@@ -193,20 +193,20 @@ def test_settings_update_mcp_config():
 
     mcp = settings.agent_settings.mcp_config
     assert mcp is not None
-    assert "custom" in mcp.mcpServers
-    assert mcp.mcpServers["custom"].transport == "http"
-    assert mcp.mcpServers["custom"].url == "https://example.com/mcp"
+    assert 'custom' in mcp.mcpServers
+    assert mcp.mcpServers['custom'].transport == 'http'
+    assert mcp.mcpServers['custom'].url == 'https://example.com/mcp'
 
 
 def test_settings_update_replaces_existing_mcp_servers():
     settings = Settings(
         agent_settings=OpenHandsAgentSettings(
-            llm=LLM(model="sdk-model"),
+            llm=LLM(model='sdk-model'),
             mcp_config=MCPConfig(
                 mcpServers={
-                    "stale": {
-                        "transport": "sse",
-                        "url": "https://example.com/stale",
+                    'stale': {
+                        'transport': 'sse',
+                        'url': 'https://example.com/stale',
                     }
                 }
             ),
@@ -215,12 +215,12 @@ def test_settings_update_replaces_existing_mcp_servers():
 
     settings.update(
         {
-            "agent_settings_diff": {
-                "mcp_config": {
-                    "mcpServers": {
-                        "fresh": {
-                            "transport": "http",
-                            "url": "https://example.com/fresh",
+            'agent_settings_diff': {
+                'mcp_config': {
+                    'mcpServers': {
+                        'fresh': {
+                            'transport': 'http',
+                            'url': 'https://example.com/fresh',
                         }
                     }
                 }
@@ -230,26 +230,26 @@ def test_settings_update_replaces_existing_mcp_servers():
 
     mcp = settings.agent_settings.mcp_config
     assert mcp is not None
-    assert set(mcp.mcpServers) == {"fresh"}
-    assert mcp.mcpServers["fresh"].url == "https://example.com/fresh"
+    assert set(mcp.mcpServers) == {'fresh'}
+    assert mcp.mcpServers['fresh'].url == 'https://example.com/fresh'
 
 
 def test_settings_update_can_clear_mcp_config():
     settings = Settings(
         agent_settings=OpenHandsAgentSettings(
-            llm=LLM(model="sdk-model"),
+            llm=LLM(model='sdk-model'),
             mcp_config=MCPConfig(
                 mcpServers={
-                    "custom": {
-                        "transport": "http",
-                        "url": "https://example.com/mcp",
+                    'custom': {
+                        'transport': 'http',
+                        'url': 'https://example.com/mcp',
                     }
                 }
             ),
         )
     )
 
-    settings.update({"agent_settings_diff": {"mcp_config": None}})
+    settings.update({'agent_settings_diff': {'mcp_config': None}})
 
     assert settings.agent_settings.mcp_config is None
 
@@ -258,20 +258,20 @@ def test_settings_update_batch():
     settings = Settings()
     settings.update(
         {
-            "language": "fr",
-            "agent_settings_diff": {
-                "agent": "TestAgent",
-                "llm": {"model": "new-model", "api_key": "new-key"},
+            'language': 'fr',
+            'agent_settings_diff': {
+                'agent': 'TestAgent',
+                'llm': {'model': 'new-model', 'api_key': 'new-key'},
             },
-            "conversation_settings_diff": {
-                "max_iterations": 200,
+            'conversation_settings_diff': {
+                'max_iterations': 200,
             },
         }
     )
-    assert settings.language == "fr"
-    assert settings.agent_settings.agent == "TestAgent"
-    assert settings.agent_settings.llm.model == "new-model"
-    assert settings.agent_settings.llm.api_key.get_secret_value() == "new-key"
+    assert settings.language == 'fr'
+    assert settings.agent_settings.agent == 'TestAgent'
+    assert settings.agent_settings.llm.model == 'new-model'
+    assert settings.agent_settings.llm.api_key.get_secret_value() == 'new-key'
     assert settings.conversation_settings.max_iterations == 200
 
 
@@ -281,21 +281,21 @@ def test_settings_update_batch():
 
 def test_switch_to_profile_updates_agent_settings_llm():
     settings = Settings()
-    settings.llm_profiles.save("my-profile", LLM(model="openai/gpt-4o"))
+    settings.llm_profiles.save('my-profile', LLM(model='openai/gpt-4o'))
 
-    settings.switch_to_profile("my-profile")
+    settings.switch_to_profile('my-profile')
 
-    assert settings.agent_settings.llm.model == "openai/gpt-4o"
-    assert settings.llm_profiles.active == "my-profile"
+    assert settings.agent_settings.llm.model == 'openai/gpt-4o'
+    assert settings.llm_profiles.active == 'my-profile'
 
 
 def test_switch_to_nonexistent_profile_raises():
     settings = Settings()
 
     with pytest.raises(ProfileNotFoundError) as exc_info:
-        settings.switch_to_profile("nonexistent")
+        settings.switch_to_profile('nonexistent')
 
-    assert exc_info.value.name == "nonexistent"
+    assert exc_info.value.name == 'nonexistent'
     assert settings.llm_profiles.active is None
 
 
@@ -303,16 +303,16 @@ def test_llm_profiles_masking_and_roundtrip():
     """Masked by default, exposed with context, and reconstructible via ``model_validate``."""
     settings = Settings()
     settings.llm_profiles.save(
-        "p", LLM(model="openai/gpt-4o", api_key=SecretStr("secret"))
+        'p', LLM(model='openai/gpt-4o', api_key=SecretStr('secret'))
     )
 
-    masked = settings.model_dump(mode="json")
-    exposed = settings.model_dump(mode="json", context={"expose_secrets": True})
-    assert masked["llm_profiles"]["profiles"]["p"]["api_key"] != "secret"
-    assert exposed["llm_profiles"]["profiles"]["p"]["api_key"] == "secret"
+    masked = settings.model_dump(mode='json')
+    exposed = settings.model_dump(mode='json', context={'expose_secrets': True})
+    assert masked['llm_profiles']['profiles']['p']['api_key'] != 'secret'
+    assert exposed['llm_profiles']['profiles']['p']['api_key'] == 'secret'
 
     rehydrated = Settings.model_validate(exposed)
-    assert rehydrated.llm_profiles.get("p").api_key.get_secret_value() == "secret"
+    assert rehydrated.llm_profiles.get('p').api_key.get_secret_value() == 'secret'
 
 
 def test_switch_to_profile_preserves_other_agent_settings():
@@ -324,63 +324,63 @@ def test_switch_to_profile_preserves_other_agent_settings():
     """
     settings = Settings(
         agent_settings=OpenHandsAgentSettings(
-            llm=LLM(model="openai/gpt-4o"),
+            llm=LLM(model='openai/gpt-4o'),
             condenser=CondenserSettings(enabled=True, max_size=321),
             verification=VerificationSettings(
-                critic_enabled=True, critic_mode="all_actions"
+                critic_enabled=True, critic_mode='all_actions'
             ),
             mcp_config=MCPConfig(
                 mcpServers={
-                    "s": {
-                        "transport": "http",
-                        "url": "https://example.com/mcp",
+                    's': {
+                        'transport': 'http',
+                        'url': 'https://example.com/mcp',
                     }
                 }
             ),
         ),
     )
-    settings.llm_profiles.save("p", LLM(model="anthropic/claude-opus-4"))
+    settings.llm_profiles.save('p', LLM(model='anthropic/claude-opus-4'))
 
-    settings.switch_to_profile("p")
+    settings.switch_to_profile('p')
 
-    assert settings.agent_settings.llm.model == "anthropic/claude-opus-4"
+    assert settings.agent_settings.llm.model == 'anthropic/claude-opus-4'
     assert settings.agent_settings.condenser.max_size == 321
-    assert settings.agent_settings.verification.critic_mode == "all_actions"
+    assert settings.agent_settings.verification.critic_mode == 'all_actions'
     assert settings.agent_settings.mcp_config is not None
-    assert "s" in settings.agent_settings.mcp_config.mcpServers
+    assert 's' in settings.agent_settings.mcp_config.mcpServers
 
 
 def test_delete_active_profile_promotes_remaining_one():
     settings = Settings()
-    settings.llm_profiles.save("a", LLM(model="openai/gpt-4o"))
-    settings.llm_profiles.save("b", LLM(model="anthropic/claude-opus-4"))
-    settings.switch_to_profile("a")
+    settings.llm_profiles.save('a', LLM(model='openai/gpt-4o'))
+    settings.llm_profiles.save('b', LLM(model='anthropic/claude-opus-4'))
+    settings.switch_to_profile('a')
 
-    assert settings.delete_profile("a") is True
+    assert settings.delete_profile('a') is True
 
-    assert "a" not in settings.llm_profiles.profiles
-    assert settings.llm_profiles.active == "b"
-    assert settings.agent_settings.llm.model == "anthropic/claude-opus-4"
+    assert 'a' not in settings.llm_profiles.profiles
+    assert settings.llm_profiles.active == 'b'
+    assert settings.agent_settings.llm.model == 'anthropic/claude-opus-4'
 
 
 def test_delete_inactive_profile_does_not_touch_active():
     settings = Settings()
-    settings.llm_profiles.save("a", LLM(model="openai/gpt-4o"))
-    settings.llm_profiles.save("b", LLM(model="anthropic/claude-opus-4"))
-    settings.switch_to_profile("a")
+    settings.llm_profiles.save('a', LLM(model='openai/gpt-4o'))
+    settings.llm_profiles.save('b', LLM(model='anthropic/claude-opus-4'))
+    settings.switch_to_profile('a')
 
-    assert settings.delete_profile("b") is True
+    assert settings.delete_profile('b') is True
 
-    assert settings.llm_profiles.active == "a"
-    assert settings.agent_settings.llm.model == "openai/gpt-4o"
+    assert settings.llm_profiles.active == 'a'
+    assert settings.agent_settings.llm.model == 'openai/gpt-4o'
 
 
 def test_delete_only_profile_clears_active():
     settings = Settings()
-    settings.llm_profiles.save("only", LLM(model="openai/gpt-4o"))
-    settings.switch_to_profile("only")
+    settings.llm_profiles.save('only', LLM(model='openai/gpt-4o'))
+    settings.switch_to_profile('only')
 
-    assert settings.delete_profile("only") is True
+    assert settings.delete_profile('only') is True
 
     assert settings.llm_profiles.profiles == {}
     assert settings.llm_profiles.active is None
@@ -388,7 +388,7 @@ def test_delete_only_profile_clears_active():
 
 def test_delete_missing_profile_returns_false():
     settings = Settings()
-    assert settings.delete_profile("nope") is False
+    assert settings.delete_profile('nope') is False
 
 
 def test_update_ignores_llm_profiles_payload():
@@ -401,9 +401,9 @@ def test_update_ignores_llm_profiles_payload():
 
     settings.update(
         {
-            "llm_profiles": {
-                "profiles": {"X": {"model": "openai/gpt-4o"}},
-                "active": "X",
+            'llm_profiles': {
+                'profiles': {'X': {'model': 'openai/gpt-4o'}},
+                'active': 'X',
             }
         }
     )
@@ -416,17 +416,17 @@ def test_update_clears_active_when_llm_diverges():
     """Editing agent_settings.llm via ``update`` must drop a now-stale active profile."""
     settings = Settings(
         agent_settings=OpenHandsAgentSettings(
-            llm=LLM(model="openai/gpt-4o", api_key=SecretStr("sk-a"))
+            llm=LLM(model='openai/gpt-4o', api_key=SecretStr('sk-a'))
         )
     )
     settings.llm_profiles.save(
-        "p", LLM(model="openai/gpt-4o", api_key=SecretStr("sk-a"))
+        'p', LLM(model='openai/gpt-4o', api_key=SecretStr('sk-a'))
     )
-    settings.switch_to_profile("p")
-    assert settings.llm_profiles.active == "p"
+    settings.switch_to_profile('p')
+    assert settings.llm_profiles.active == 'p'
 
     settings.update(
-        {"agent_settings_diff": {"llm": {"model": "anthropic/claude-opus-4"}}}
+        {'agent_settings_diff': {'llm': {'model': 'anthropic/claude-opus-4'}}}
     )
 
     assert settings.llm_profiles.active is None
@@ -436,59 +436,59 @@ def test_update_keeps_active_when_llm_unchanged():
     """A no-op LLM update must not spuriously clear ``active``."""
     settings = Settings(
         agent_settings=OpenHandsAgentSettings(
-            llm=LLM(model="openai/gpt-4o", api_key=SecretStr("sk-a"))
+            llm=LLM(model='openai/gpt-4o', api_key=SecretStr('sk-a'))
         )
     )
     settings.llm_profiles.save(
-        "p", LLM(model="openai/gpt-4o", api_key=SecretStr("sk-a"))
+        'p', LLM(model='openai/gpt-4o', api_key=SecretStr('sk-a'))
     )
-    settings.switch_to_profile("p")
+    settings.switch_to_profile('p')
 
     # Update an unrelated field.
-    settings.update({"language": "fr"})
+    settings.update({'language': 'fr'})
 
-    assert settings.llm_profiles.active == "p"
+    assert settings.llm_profiles.active == 'p'
 
 
 def test_settings_update_batch_accepts_diff_keys():
     settings = Settings()
     settings.update(
         {
-            "agent_settings_diff": {
-                "agent": "DiffAgent",
-                "llm": {"model": "diff-model", "api_key": "diff-key"},
+            'agent_settings_diff': {
+                'agent': 'DiffAgent',
+                'llm': {'model': 'diff-model', 'api_key': 'diff-key'},
             },
-            "conversation_settings_diff": {
-                "max_iterations": 123,
+            'conversation_settings_diff': {
+                'max_iterations': 123,
             },
         }
     )
 
-    assert settings.agent_settings.agent == "DiffAgent"
-    assert settings.agent_settings.llm.model == "diff-model"
-    assert settings.agent_settings.llm.api_key.get_secret_value() == "diff-key"
+    assert settings.agent_settings.agent == 'DiffAgent'
+    assert settings.agent_settings.llm.model == 'diff-model'
+    assert settings.agent_settings.llm.api_key.get_secret_value() == 'diff-key'
     assert settings.conversation_settings.max_iterations == 123
 
 
 def test_settings_update_rejects_legacy_nested_keys():
     settings = Settings()
 
-    with pytest.raises(ValueError, match=r"Use \*_diff nested settings payloads"):
-        settings.update({"agent_settings": {"agent": "LegacyAgent"}})
+    with pytest.raises(ValueError, match=r'Use \*_diff nested settings payloads'):
+        settings.update({'agent_settings': {'agent': 'LegacyAgent'}})
 
 
 def test_settings_no_pydantic_frozen_field_warning():
     """Test that Settings model does not trigger Pydantic UnsupportedFieldAttributeWarning."""
     with warnings.catch_warnings(record=True) as w:
-        warnings.simplefilter("always")
+        warnings.simplefilter('always')
         importlib.reload(settings_module)
 
         frozen_warnings = [
-            warning for warning in w if "frozen" in str(warning.message).lower()
+            warning for warning in w if 'frozen' in str(warning.message).lower()
         ]
 
         assert len(frozen_warnings) == 0, (
-            f"Pydantic frozen field warnings found: {[str(w.message) for w in frozen_warnings]}"
+            f'Pydantic frozen field warnings found: {[str(w.message) for w in frozen_warnings]}'
         )
 
 
@@ -497,18 +497,18 @@ def test_litellm_proxy_to_openhands_conversion_with_openhands_proxy():
     settings = Settings(
         agent_settings=OpenHandsAgentSettings(
             llm=LLM(
-                model="litellm_proxy/claude-opus-4-5-20251101",
+                model='litellm_proxy/claude-opus-4-5-20251101',
                 base_url=LITE_LLM_API_URL,
             )
         )
     )
 
     # Internal representation should be litellm_proxy/
-    assert settings.agent_settings.llm.model == "litellm_proxy/claude-opus-4-5-20251101"
+    assert settings.agent_settings.llm.model == 'litellm_proxy/claude-opus-4-5-20251101'
 
     # Display representation should convert to openhands/
     api_data = settings.get_agent_settings_display()
-    assert api_data["llm"]["model"] == "openhands/claude-opus-4-5-20251101"
+    assert api_data['llm']['model'] == 'openhands/claude-opus-4-5-20251101'
 
 
 def test_litellm_proxy_custom_endpoint_keeps_prefix():
@@ -516,34 +516,34 @@ def test_litellm_proxy_custom_endpoint_keeps_prefix():
     settings = Settings(
         agent_settings=OpenHandsAgentSettings(
             llm=LLM(
-                model="litellm_proxy/gpt-5.3-codex",
-                base_url="http://custom-proxy.example.com:4000",
+                model='litellm_proxy/gpt-5.3-codex',
+                base_url='http://custom-proxy.example.com:4000',
             )
         )
     )
 
     # Internal representation
-    assert settings.agent_settings.llm.model == "litellm_proxy/gpt-5.3-codex"
+    assert settings.agent_settings.llm.model == 'litellm_proxy/gpt-5.3-codex'
 
     # Display should NOT convert to openhands/ because it's a custom endpoint
     api_data = settings.get_agent_settings_display()
-    assert api_data["llm"]["model"] == "litellm_proxy/gpt-5.3-codex"
+    assert api_data['llm']['model'] == 'litellm_proxy/gpt-5.3-codex'
 
 
 def test_openhands_model_converts_to_litellm_proxy_internally():
     """Test that openhands/ models are stored as litellm_proxy/ internally."""
     settings = Settings(
         agent_settings=OpenHandsAgentSettings(
-            llm=LLM(model="openhands/claude-opus-4-5-20251101")
+            llm=LLM(model='openhands/claude-opus-4-5-20251101')
         )
     )
 
     # Internal representation should be litellm_proxy/
-    assert settings.agent_settings.llm.model == "litellm_proxy/claude-opus-4-5-20251101"
+    assert settings.agent_settings.llm.model == 'litellm_proxy/claude-opus-4-5-20251101'
 
     # Display representation should convert back to openhands/
     api_data = settings.get_agent_settings_display()
-    assert api_data["llm"]["model"] == "openhands/claude-opus-4-5-20251101"
+    assert api_data['llm']['model'] == 'openhands/claude-opus-4-5-20251101'
 
 
 # ── ACP profile switching ──────────────────────────────────────────
@@ -553,59 +553,59 @@ def test_switch_to_acp_profile_from_openhands_mode():
     """Activating an ACP profile from OpenHands mode switches agent kind."""
     settings = Settings()
     profile = AgentProfile(
-        agent_kind="acp",
-        acp_server="claude-code",
-        acp_model="claude-opus-4-7",
-        api_key=SecretStr("sk-ant"),
+        agent_kind='acp',
+        acp_server='claude-code',
+        acp_model='claude-opus-4-7',
+        api_key=SecretStr('sk-ant'),
     )
-    settings.llm_profiles.save("cc", profile)
+    settings.llm_profiles.save('cc', profile)
 
-    settings.switch_to_profile("cc")
+    settings.switch_to_profile('cc')
 
     assert isinstance(settings.agent_settings, ACPAgentSettings)
-    assert settings.agent_settings.acp_server == "claude-code"
-    assert settings.agent_settings.acp_model == "claude-opus-4-7"
-    assert settings.agent_settings.llm.api_key.get_secret_value() == "sk-ant"
-    assert settings.llm_profiles.active == "cc"
+    assert settings.agent_settings.acp_server == 'claude-code'
+    assert settings.agent_settings.acp_model == 'claude-opus-4-7'
+    assert settings.agent_settings.llm.api_key.get_secret_value() == 'sk-ant'
+    assert settings.llm_profiles.active == 'cc'
 
 
 def test_switch_to_openhands_profile_from_acp_mode():
     """Activating an OpenHands profile from ACP mode switches agent kind."""
     settings = Settings(
         agent_settings=ACPAgentSettings(
-            acp_server="claude-code", acp_model="claude-opus-4-7"
+            acp_server='claude-code', acp_model='claude-opus-4-7'
         )
     )
-    profile = AgentProfile(model="openai/gpt-4o", api_key=SecretStr("sk-1"))
-    settings.llm_profiles.save("gpt4", profile)
+    profile = AgentProfile(model='openai/gpt-4o', api_key=SecretStr('sk-1'))
+    settings.llm_profiles.save('gpt4', profile)
 
-    settings.switch_to_profile("gpt4")
+    settings.switch_to_profile('gpt4')
 
     assert isinstance(settings.agent_settings, OpenHandsAgentSettings)
-    assert settings.agent_settings.llm.model == "openai/gpt-4o"
-    assert settings.llm_profiles.active == "gpt4"
+    assert settings.agent_settings.llm.model == 'openai/gpt-4o'
+    assert settings.llm_profiles.active == 'gpt4'
 
 
 def test_switch_to_acp_profile_preserves_deployment_fields():
     """Switching between ACP profiles must keep acp_command/args/env overrides."""
     acp = ACPAgentSettings(
-        acp_server="codex",
-        acp_model="gpt-4o",
-        acp_command=["custom-codex-bin"],
+        acp_server='codex',
+        acp_model='gpt-4o',
+        acp_command=['custom-codex-bin'],
     )
     settings = Settings(agent_settings=acp)
     profile = AgentProfile(
-        agent_kind="acp",
-        acp_server="claude-code",
-        acp_model="claude-opus-4-7",
+        agent_kind='acp',
+        acp_server='claude-code',
+        acp_model='claude-opus-4-7',
     )
-    settings.llm_profiles.save("cc", profile)
+    settings.llm_profiles.save('cc', profile)
 
-    settings.switch_to_profile("cc")
+    settings.switch_to_profile('cc')
 
-    assert settings.agent_settings.acp_server == "claude-code"
-    assert settings.agent_settings.acp_model == "claude-opus-4-7"
-    assert settings.agent_settings.acp_command == ["custom-codex-bin"]
+    assert settings.agent_settings.acp_server == 'claude-code'
+    assert settings.agent_settings.acp_model == 'claude-opus-4-7'
+    assert settings.agent_settings.acp_command == ['custom-codex-bin']
 
 
 # ── reconcile_active_profile with ACP ─────────────────────────────
@@ -614,33 +614,33 @@ def test_switch_to_acp_profile_preserves_deployment_fields():
 def test_reconcile_acp_profile_kept_when_settings_match():
     settings = Settings(
         agent_settings=ACPAgentSettings(
-            acp_server="claude-code", acp_model="claude-opus-4-7"
+            acp_server='claude-code', acp_model='claude-opus-4-7'
         )
     )
     settings.llm_profiles.save(
-        "cc",
+        'cc',
         AgentProfile(
-            agent_kind="acp", acp_server="claude-code", acp_model="claude-opus-4-7"
+            agent_kind='acp', acp_server='claude-code', acp_model='claude-opus-4-7'
         ),
     )
-    settings.llm_profiles.active = "cc"
+    settings.llm_profiles.active = 'cc'
 
     settings.reconcile_active_profile()
 
-    assert settings.llm_profiles.active == "cc"
+    assert settings.llm_profiles.active == 'cc'
 
 
 def test_reconcile_acp_profile_cleared_when_server_diverges():
     settings = Settings(
-        agent_settings=ACPAgentSettings(acp_server="codex", acp_model="gpt-4o")
+        agent_settings=ACPAgentSettings(acp_server='codex', acp_model='gpt-4o')
     )
     settings.llm_profiles.save(
-        "cc",
+        'cc',
         AgentProfile(
-            agent_kind="acp", acp_server="claude-code", acp_model="claude-opus-4-7"
+            agent_kind='acp', acp_server='claude-code', acp_model='claude-opus-4-7'
         ),
     )
-    settings.llm_profiles.active = "cc"
+    settings.llm_profiles.active = 'cc'
 
     settings.reconcile_active_profile()
 
@@ -651,12 +651,12 @@ def test_reconcile_acp_profile_cleared_when_agent_kind_is_openhands():
     """An ACP profile pointer must be dropped when the agent is in OpenHands mode."""
     settings = Settings()  # defaults to OpenHandsAgentSettings
     settings.llm_profiles.save(
-        "cc",
+        'cc',
         AgentProfile(
-            agent_kind="acp", acp_server="claude-code", acp_model="claude-opus-4-7"
+            agent_kind='acp', acp_server='claude-code', acp_model='claude-opus-4-7'
         ),
     )
-    settings.llm_profiles.active = "cc"
+    settings.llm_profiles.active = 'cc'
 
     settings.reconcile_active_profile()
 
@@ -664,24 +664,24 @@ def test_reconcile_acp_profile_cleared_when_agent_kind_is_openhands():
 
 
 def test_reconcile_acp_profile_cleared_when_api_key_diverges():
-    profile_key = SecretStr("sk-profile")
+    profile_key = SecretStr('sk-profile')
     settings = Settings(
         agent_settings=ACPAgentSettings(
-            acp_server="claude-code",
-            acp_model="claude-opus-4-7",
-            llm=LLM(model="claude-opus-4-7", api_key=SecretStr("sk-different")),
+            acp_server='claude-code',
+            acp_model='claude-opus-4-7',
+            llm=LLM(model='claude-opus-4-7', api_key=SecretStr('sk-different')),
         )
     )
     settings.llm_profiles.save(
-        "cc",
+        'cc',
         AgentProfile(
-            agent_kind="acp",
-            acp_server="claude-code",
-            acp_model="claude-opus-4-7",
+            agent_kind='acp',
+            acp_server='claude-code',
+            acp_model='claude-opus-4-7',
             api_key=profile_key,
         ),
     )
-    settings.llm_profiles.active = "cc"
+    settings.llm_profiles.active = 'cc'
 
     settings.reconcile_active_profile()
 
@@ -693,22 +693,22 @@ def test_reconcile_acp_profile_cleared_when_api_key_diverges():
 
 def test_agent_profile_from_acp_settings():
     acp = ACPAgentSettings(
-        acp_server="claude-code",
-        acp_model="claude-opus-4-7",
+        acp_server='claude-code',
+        acp_model='claude-opus-4-7',
         llm=LLM(
-            model="claude-opus-4-7",
-            api_key=SecretStr("sk-ant"),
-            base_url="https://proxy.example.com",
+            model='claude-opus-4-7',
+            api_key=SecretStr('sk-ant'),
+            base_url='https://proxy.example.com',
         ),
     )
 
     p = AgentProfile.from_acp_settings(acp)
 
-    assert p.agent_kind == "acp"
-    assert p.acp_server == "claude-code"
-    assert p.acp_model == "claude-opus-4-7"
-    assert p.api_key.get_secret_value() == "sk-ant"
-    assert p.base_url == "https://proxy.example.com"
+    assert p.agent_kind == 'acp'
+    assert p.acp_server == 'claude-code'
+    assert p.acp_model == 'claude-opus-4-7'
+    assert p.api_key.get_secret_value() == 'sk-ant'
+    assert p.base_url == 'https://proxy.example.com'
 
 
 # ── _secret_eq helper ─────────────────────────────────────────────
@@ -719,13 +719,13 @@ def test_secret_eq_both_none():
 
 
 def test_secret_eq_one_none():
-    assert _secret_eq(None, SecretStr("x")) is False
-    assert _secret_eq(SecretStr("x"), None) is False
+    assert _secret_eq(None, SecretStr('x')) is False
+    assert _secret_eq(SecretStr('x'), None) is False
 
 
 def test_secret_eq_matching_values():
-    assert _secret_eq(SecretStr("sk-abc"), SecretStr("sk-abc")) is True
+    assert _secret_eq(SecretStr('sk-abc'), SecretStr('sk-abc')) is True
 
 
 def test_secret_eq_different_values():
-    assert _secret_eq(SecretStr("sk-abc"), SecretStr("sk-xyz")) is False
+    assert _secret_eq(SecretStr('sk-abc'), SecretStr('sk-xyz')) is False
