@@ -91,15 +91,15 @@ def _load_persisted_conversation_settings(data: Any) -> ConversationSettings:
 class SandboxGroupingStrategy(str, Enum):
     """Strategy for grouping conversations within sandboxes."""
 
-    NO_GROUPING = 'NO_GROUPING'  # Default - each conversation gets its own sandbox
-    GROUP_BY_NEWEST = 'GROUP_BY_NEWEST'  # Add to the most recently created sandbox
+    NO_GROUPING = "NO_GROUPING"  # Default - each conversation gets its own sandbox
+    GROUP_BY_NEWEST = "GROUP_BY_NEWEST"  # Add to the most recently created sandbox
     LEAST_RECENTLY_USED = (
-        'LEAST_RECENTLY_USED'  # Add to the least recently used sandbox
+        "LEAST_RECENTLY_USED"  # Add to the least recently used sandbox
     )
     FEWEST_CONVERSATIONS = (
-        'FEWEST_CONVERSATIONS'  # Add to sandbox with fewest conversations
+        "FEWEST_CONVERSATIONS"  # Add to sandbox with fewest conversations
     )
-    ADD_TO_ANY = 'ADD_TO_ANY'  # Add to any available sandbox (first found)
+    ADD_TO_ANY = "ADD_TO_ANY"  # Add to any available sandbox (first found)
 
 
 # Fields the batch ``update()`` method refuses to touch:
@@ -109,7 +109,7 @@ class SandboxGroupingStrategy(str, Enum):
 #   inputs, enforce the count cap, and take the per-user lock. Accepting a
 #   raw dict here both bypassed those guards and crashed downstream
 #   serialisation.
-_SETTINGS_UPDATE_IGNORED_FIELDS = frozenset(['secrets_store', 'llm_profiles'])
+_SETTINGS_UPDATE_IGNORED_FIELDS = frozenset(["secrets_store", "llm_profiles"])
 
 
 class Settings(BaseModel):
@@ -150,8 +150,8 @@ class Settings(BaseModel):
     llm_profiles: LLMProfiles = Field(
         default_factory=LLMProfiles,
         description=(
-            'Saved LLM profiles and the currently active profile name. '
-            'See ``LLMProfiles`` for the profile-management API.'
+            "Saved LLM profiles and the currently active profile name. "
+            "See ``LLMProfiles`` for the profile-management API."
         ),
     )
 
@@ -161,8 +161,8 @@ class Settings(BaseModel):
         # Import Secrets here to avoid circular imports
         from openhands.app_server.secrets.secrets_models import Secrets
 
-        if 'secrets_store' not in data or data['secrets_store'] is None:
-            data['secrets_store'] = Secrets()
+        if "secrets_store" not in data or data["secrets_store"] is None:
+            data["secrets_store"] = Secrets()
         super().__init__(**data)
 
     @property
@@ -194,7 +194,7 @@ class Settings(BaseModel):
             self.llm_profiles.active = None
             return
 
-        if profile.agent_kind == 'openhands':
+        if profile.agent_kind == "openhands":
             llm = self.agent_settings.llm
             if (
                 profile.model != llm.model
@@ -202,7 +202,7 @@ class Settings(BaseModel):
                 or profile.base_url != llm.base_url
             ):
                 self.llm_profiles.active = None
-        elif profile.agent_kind == 'acp':
+        elif profile.agent_kind == "acp":
             if not isinstance(self.agent_settings, ACPAgentSettings):
                 self.llm_profiles.active = None
             elif (
@@ -221,15 +221,15 @@ class Settings(BaseModel):
         model.
         """
         legacy_nested_keys = [
-            key for key in ('agent_settings', 'conversation_settings') if key in payload
+            key for key in ("agent_settings", "conversation_settings") if key in payload
         ]
         if legacy_nested_keys:
             raise ValueError(
-                'Use *_diff nested settings payloads instead of legacy '
-                + ', '.join(sorted(legacy_nested_keys))
+                "Use *_diff nested settings payloads instead of legacy "
+                + ", ".join(sorted(legacy_nested_keys))
             )
 
-        agent_update = payload.get('agent_settings_diff')
+        agent_update = payload.get("agent_settings_diff")
         if isinstance(agent_update, dict):
             coerced: dict[str, Any] = {}
             for key, value in agent_update.items():
@@ -237,15 +237,15 @@ class Settings(BaseModel):
                     _coerce_value(value) if not isinstance(value, dict) else value
                 )
 
-            replace_mcp_config = 'mcp_config' in agent_update
-            mcp_config = coerced.pop('mcp_config', None) if replace_mcp_config else None
+            replace_mcp_config = "mcp_config" in agent_update
+            mcp_config = coerced.pop("mcp_config", None) if replace_mcp_config else None
 
             # acp_env is a flat credential dict that should be replaced wholesale
             # when present; deep-merging would make removed keys persist across saves.
-            replace_acp_env = 'acp_env' in agent_update
-            acp_env = coerced.pop('acp_env', None) if replace_acp_env else None
+            replace_acp_env = "acp_env" in agent_update
+            acp_env = coerced.pop("acp_env", None) if replace_acp_env else None
 
-            new_kind = coerced.get('agent_kind')
+            new_kind = coerced.get("agent_kind")
             current_kind = self.agent_settings.agent_kind
 
             if new_kind and new_kind != current_kind:
@@ -256,36 +256,36 @@ class Settings(BaseModel):
                 # fails validation. Start from a fresh base for the new
                 # kind. Cross-kind config preservation tracked in
                 # OpenHands/OpenHands#14370.
-                base: dict[str, Any] = {'agent_kind': new_kind}
+                base: dict[str, Any] = {"agent_kind": new_kind}
             else:
                 base = self.agent_settings.model_dump(
-                    mode='json', context={'expose_secrets': True}
+                    mode="json", context={"expose_secrets": True}
                 )
 
             merged = deep_merge(base, coerced)
             if replace_mcp_config:
-                merged['mcp_config'] = mcp_config
+                merged["mcp_config"] = mcp_config
             if replace_acp_env:
-                merged['acp_env'] = acp_env or {}
+                merged["acp_env"] = acp_env or {}
 
             # Use object.__setattr__ to avoid validate_assignment
             # side-effects on other fields.
-            object.__setattr__(self, 'agent_settings', validate_agent_settings(merged))
+            object.__setattr__(self, "agent_settings", validate_agent_settings(merged))
 
-        conv_update = payload.get('conversation_settings_diff')
+        conv_update = payload.get("conversation_settings_diff")
         if isinstance(conv_update, dict):
             merged = deep_merge(
-                self.conversation_settings.model_dump(mode='json'),
+                self.conversation_settings.model_dump(mode="json"),
                 conv_update,
             )
             object.__setattr__(
                 self,
-                'conversation_settings',
+                "conversation_settings",
                 ConversationSettings.model_validate(merged),
             )
 
         for key, value in payload.items():
-            if key in ('agent_settings_diff', 'conversation_settings_diff'):
+            if key in ("agent_settings_diff", "conversation_settings_diff"):
                 continue
             if (
                 key in Settings.model_fields
@@ -296,8 +296,8 @@ class Settings(BaseModel):
                 if value is not None and isinstance(value, str):
                     annotation = field_info.annotation
                     if annotation is SecretStr or (
-                        hasattr(annotation, '__args__')
-                        and SecretStr in getattr(annotation, '__args__', ())
+                        hasattr(annotation, "__args__")
+                        and SecretStr in getattr(annotation, "__args__", ())
                     ):
                         value = SecretStr(value) if value else None
                 setattr(self, key, value)
@@ -306,7 +306,7 @@ class Settings(BaseModel):
 
     # ── Serialization ───────────────────────────────────────────────
 
-    @field_serializer('search_api_key')
+    @field_serializer("search_api_key")
     def api_key_serializer(self, api_key: SecretStr | None, info: SerializationInfo):
         if api_key is None:
             return None
@@ -314,22 +314,22 @@ class Settings(BaseModel):
         if not secret_value or not secret_value.strip():
             return None
         context = info.context
-        if context and context.get('expose_secrets', False):
+        if context and context.get("expose_secrets", False):
             return secret_value
         return str(api_key)
 
-    @field_serializer('agent_settings')
+    @field_serializer("agent_settings")
     def agent_settings_serializer(
         self,
         agent_settings: OpenHandsAgentSettings | ACPAgentSettings,
         info: SerializationInfo,
     ) -> dict[str, Any]:
         context = info.context or {}
-        if context.get('expose_secrets', False):
+        if context.get("expose_secrets", False):
             return agent_settings.model_dump(
-                mode='json', context={'expose_secrets': True}
+                mode="json", context={"expose_secrets": True}
             )
-        return agent_settings.model_dump(mode='json')
+        return agent_settings.model_dump(mode="json")
 
     # ── Profile management ─────────────────────────────────────────
     #
@@ -355,7 +355,7 @@ class Settings(BaseModel):
 
         profile = self.llm_profiles.require(name)
 
-        if profile.agent_kind == 'openhands':
+        if profile.agent_kind == "openhands":
             llm = LLM(
                 model=profile.model, api_key=profile.api_key, base_url=profile.base_url
             )
@@ -363,20 +363,20 @@ class Settings(BaseModel):
                 self.agent_settings = OpenHandsAgentSettings(llm=llm)
             else:
                 self.agent_settings = self.agent_settings.model_copy(
-                    update={'llm': llm}
+                    update={"llm": llm}
                 )
         else:
             attribution_llm = LLM(
-                model=profile.acp_model or 'acp-managed',
+                model=profile.acp_model or "acp-managed",
                 api_key=profile.api_key,
                 base_url=profile.base_url,
             )
             if isinstance(self.agent_settings, ACPAgentSettings):
                 self.agent_settings = self.agent_settings.model_copy(
                     update={
-                        'acp_server': profile.acp_server,
-                        'acp_model': profile.acp_model,
-                        'llm': attribution_llm,
+                        "acp_server": profile.acp_server,
+                        "acp_model": profile.acp_model,
+                        "llm": attribution_llm,
                     }
                 )
             else:
@@ -404,7 +404,7 @@ class Settings(BaseModel):
             self.switch_to_profile(fallback)
         return True
 
-    @model_validator(mode='before')
+    @model_validator(mode="before")
     @classmethod
     def _normalize_inputs(cls, data: dict | object) -> dict | object:
         """Normalize agent_settings and secrets_store inputs."""
@@ -415,54 +415,54 @@ class Settings(BaseModel):
             return data
 
         # --- Agent settings: coerce SecretStr leaves to plain strings ---
-        agent_settings = data.get('agent_settings')
+        agent_settings = data.get("agent_settings")
         if isinstance(agent_settings, dict):
-            data['agent_settings'] = _load_persisted_agent_settings(
+            data["agent_settings"] = _load_persisted_agent_settings(
                 _coerce_dict_secrets(agent_settings)
-            ).model_dump(mode='json', context={'expose_secrets': True})
+            ).model_dump(mode="json", context={"expose_secrets": True})
         elif isinstance(agent_settings, (OpenHandsAgentSettings, ACPAgentSettings)):
-            data['agent_settings'] = agent_settings.model_dump(
-                mode='json', context={'expose_secrets': True}
+            data["agent_settings"] = agent_settings.model_dump(
+                mode="json", context={"expose_secrets": True}
             )
 
         # --- Conversation settings: normalize ---
-        conversation_settings = data.get('conversation_settings')
+        conversation_settings = data.get("conversation_settings")
         if isinstance(conversation_settings, dict):
-            data['conversation_settings'] = _load_persisted_conversation_settings(
+            data["conversation_settings"] = _load_persisted_conversation_settings(
                 conversation_settings
-            ).model_dump(mode='json')
+            ).model_dump(mode="json")
         elif isinstance(conversation_settings, ConversationSettings):
-            data['conversation_settings'] = conversation_settings.model_dump(
-                mode='json'
+            data["conversation_settings"] = conversation_settings.model_dump(
+                mode="json"
             )
 
         # --- Secrets store ---
-        secrets_store = data.get('secrets_store')
+        secrets_store = data.get("secrets_store")
         if isinstance(secrets_store, dict):
-            custom_secrets = secrets_store.get('custom_secrets')
-            tokens = secrets_store.get('provider_tokens')
+            custom_secrets = secrets_store.get("custom_secrets")
+            tokens = secrets_store.get("provider_tokens")
             secret_store = Secrets.model_validate(
-                {'provider_tokens': {}, 'custom_secrets': {}}
+                {"provider_tokens": {}, "custom_secrets": {}}
             )
             if isinstance(tokens, dict):
-                converted_store = Secrets.model_validate({'provider_tokens': tokens})
+                converted_store = Secrets.model_validate({"provider_tokens": tokens})
                 secret_store = secret_store.model_copy(
-                    update={'provider_tokens': converted_store.provider_tokens}
+                    update={"provider_tokens": converted_store.provider_tokens}
                 )
             if isinstance(custom_secrets, dict):
                 converted_store = Secrets.model_validate(
-                    {'custom_secrets': custom_secrets}
+                    {"custom_secrets": custom_secrets}
                 )
                 secret_store = secret_store.model_copy(
-                    update={'custom_secrets': converted_store.custom_secrets}
+                    update={"custom_secrets": converted_store.custom_secrets}
                 )
-            data['secrets_store'] = secret_store
+            data["secrets_store"] = secret_store
 
         return data
 
-    @field_serializer('secrets_store')
+    @field_serializer("secrets_store")
     def secrets_store_serializer(self, secrets: Any, info: SerializationInfo):
-        return {'provider_tokens': {}}
+        return {"provider_tokens": {}}
 
     def to_agent_settings(self) -> OpenHandsAgentSettings | ACPAgentSettings:
         return self.agent_settings
@@ -480,26 +480,26 @@ class Settings(BaseModel):
         from openhands.app_server.settings.settings_router import LITE_LLM_API_URL
         from openhands.app_server.utils.llm import is_openhands_model
 
-        data = self.agent_settings.model_dump(mode='json')
-        llm = data.get('llm')
+        data = self.agent_settings.model_dump(mode="json")
+        llm = data.get("llm")
         if isinstance(llm, dict):
-            model = llm.get('model')
-            base_url = llm.get('base_url')
+            model = llm.get("model")
+            base_url = llm.get("base_url")
 
             # Only convert litellm_proxy/ to openhands/ if using the OpenHands proxy
-            if isinstance(model, str) and model.startswith('litellm_proxy/'):
-                normalized_base = (base_url or '').rstrip('/')
-                normalized_proxy = LITE_LLM_API_URL.rstrip('/')
+            if isinstance(model, str) and model.startswith("litellm_proxy/"):
+                normalized_base = (base_url or "").rstrip("/")
+                normalized_proxy = LITE_LLM_API_URL.rstrip("/")
                 if normalized_base == normalized_proxy:
-                    llm['model'] = f'openhands/{model.removeprefix("litellm_proxy/")}'
+                    llm["model"] = f"openhands/{model.removeprefix('litellm_proxy/')}"
 
             # Clear the proxy base_url for managed models so the frontend
             # sees null and can display the simple "basic" settings view.
             if is_openhands_model(model):
-                normalized_base = (base_url or '').rstrip('/')
-                normalized_proxy = LITE_LLM_API_URL.rstrip('/')
+                normalized_base = (base_url or "").rstrip("/")
+                normalized_proxy = LITE_LLM_API_URL.rstrip("/")
                 if normalized_base == normalized_proxy:
-                    llm['base_url'] = None
+                    llm["base_url"] = None
         return data
 
 

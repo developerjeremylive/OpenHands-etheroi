@@ -53,7 +53,7 @@ class ProfileLimitExceededError(ValueError):
     def __init__(self, limit: int) -> None:
         self.limit = limit
         super().__init__(
-            f'Profile limit reached ({limit}). Delete a profile before saving a new one.'
+            f"Profile limit reached ({limit}). Delete a profile before saving a new one."
         )
 
 
@@ -79,10 +79,10 @@ class AgentProfile(BaseModel):
     - When ``agent_kind='openhands'``, ``acp_server`` and ``acp_model`` are ``None``.
     """
 
-    model_config = ConfigDict(extra='ignore')
+    model_config = ConfigDict(extra="ignore")
 
     # Discriminator — absent in legacy LLM-shaped data → defaults to "openhands".
-    agent_kind: Literal['openhands', 'acp'] = 'openhands'
+    agent_kind: Literal["openhands", "acp"] = "openhands"
 
     # Shared credential fields.  For OpenHands agents these go directly into
     # the LLM; for ACP agents they are translated to provider-specific env vars
@@ -91,17 +91,17 @@ class AgentProfile(BaseModel):
     base_url: str | None = None
 
     # OpenHands-specific: the LLM model identifier.
-    model: str = ''
+    model: str = ""
 
     # ACP-specific fields.
     acp_server: ACPServerKind | None = None
     acp_model: str | None = None
 
-    @model_validator(mode='after')
+    @model_validator(mode="after")
     def _validate_acp_fields(self) -> AgentProfile:
-        if self.agent_kind == 'acp' and self.acp_server is None:
+        if self.agent_kind == "acp" and self.acp_server is None:
             raise ValueError("acp_server is required when agent_kind='acp'")
-        if self.agent_kind == 'openhands' and (
+        if self.agent_kind == "openhands" and (
             self.acp_server is not None or self.acp_model is not None
         ):
             raise ValueError(
@@ -109,18 +109,18 @@ class AgentProfile(BaseModel):
             )
         return self
 
-    @field_serializer('api_key', when_used='always')
+    @field_serializer("api_key", when_used="always")
     def _serialize_api_key(
         self, value: SecretStr | None, info: SerializationInfo
     ) -> Any:
         if value is None:
             return None
         context = info.context or {}
-        expose = context.get('expose_secrets', False)
-        if expose == 'plaintext' or expose is True:
+        expose = context.get("expose_secrets", False)
+        if expose == "plaintext" or expose is True:
             return value.get_secret_value()
-        if expose == 'encrypted':
-            cipher = context.get('cipher')
+        if expose == "encrypted":
+            cipher = context.get("cipher")
             if cipher is not None:
                 return cipher.encrypt(value.get_secret_value())
         # Default: mask (same convention as LLM serialization)
@@ -130,7 +130,7 @@ class AgentProfile(BaseModel):
     def from_llm(cls, llm: LLM) -> AgentProfile:
         """Build an OpenHands profile from a live LLM instance."""
         return cls(
-            agent_kind='openhands',
+            agent_kind="openhands",
             model=llm.model,
             api_key=llm.api_key,
             base_url=llm.base_url,
@@ -140,7 +140,7 @@ class AgentProfile(BaseModel):
     def from_acp_settings(cls, settings: Any) -> AgentProfile:
         """Build an ACP profile from a live ACPAgentSettings instance."""
         return cls(
-            agent_kind='acp',
+            agent_kind="acp",
             acp_server=settings.acp_server,
             acp_model=settings.acp_model,
             api_key=settings.llm.api_key,
@@ -157,13 +157,13 @@ class StrictLLM(LLM):
     field quietly dropped.
     """
 
-    model_config = ConfigDict(extra='forbid')
+    model_config = ConfigDict(extra="forbid")
 
 
 class StrictAgentProfile(AgentProfile):
     """AgentProfile variant that rejects unknown fields for API input validation."""
 
-    model_config = ConfigDict(extra='forbid')
+    model_config = ConfigDict(extra="forbid")
 
 
 class LLMProfiles(BaseModel):
@@ -192,7 +192,7 @@ class LLMProfiles(BaseModel):
 
     # ── Validation ─────────────────────────────────────────────────
 
-    @field_validator('profiles', mode='before')
+    @field_validator("profiles", mode="before")
     @classmethod
     def _skip_invalid_profiles(cls, value: Any) -> Any:
         """Best-effort per-profile load: skip entries that fail to validate.
@@ -216,14 +216,14 @@ class LLMProfiles(BaseModel):
             try:
                 valid[name] = AgentProfile.model_validate(raw)
             except ValidationError as exc:
-                logger.warning('Skipping invalid agent profile %r: %s', name, exc)
+                logger.warning("Skipping invalid agent profile %r: %s", name, exc)
         return valid
 
-    @model_validator(mode='after')
+    @model_validator(mode="after")
     def _reconcile_active(self) -> LLMProfiles:
         if self.active is not None and self.active not in self.profiles:
             # Bypass validate_assignment to avoid re-entering this validator.
-            object.__setattr__(self, 'active', None)
+            object.__setattr__(self, "active", None)
         return self
 
     # ── Queries ────────────────────────────────────────────────────
@@ -251,13 +251,13 @@ class LLMProfiles(BaseModel):
         """
         return [
             {
-                'name': name,
-                'agent_kind': p.agent_kind,
-                'model': p.model or None,
-                'acp_server': p.acp_server,
-                'acp_model': p.acp_model,
-                'base_url': p.base_url,
-                'api_key_set': has_real_api_key(p.api_key),
+                "name": name,
+                "agent_kind": p.agent_kind,
+                "model": p.model or None,
+                "acp_server": p.acp_server,
+                "acp_model": p.acp_model,
+                "base_url": p.base_url,
+                "api_key_set": has_real_api_key(p.api_key),
             }
             for name, p in self.profiles.items()
         ]
@@ -287,7 +287,7 @@ class LLMProfiles(BaseModel):
         if name not in self.profiles and len(self.profiles) >= MAX_PROFILES_PER_USER:
             raise ProfileLimitExceededError(MAX_PROFILES_PER_USER)
 
-        update = {} if include_secrets else {'api_key': None}
+        update = {} if include_secrets else {"api_key": None}
         self.profiles[name] = profile.model_copy(update=update)
 
     def rename(self, old_name: str, new_name: str) -> None:
@@ -320,7 +320,7 @@ class LLMProfiles(BaseModel):
         if was_active:
             # Bypass validate_assignment since we know the invariant holds
             # (new_name is now a key of self.profiles).
-            object.__setattr__(self, 'active', new_name)
+            object.__setattr__(self, "active", new_name)
 
     def delete(self, name: str) -> bool:
         """Delete a profile. Returns True if the profile existed.
@@ -332,18 +332,18 @@ class LLMProfiles(BaseModel):
         del self.profiles[name]
         if self.active == name:
             # Bypass validate_assignment since we already know the invariant holds.
-            object.__setattr__(self, 'active', None)
+            object.__setattr__(self, "active", None)
         return True
 
     # ── Serialization ──────────────────────────────────────────────
 
-    @field_serializer('profiles')
+    @field_serializer("profiles")
     def _profiles_serializer(
         self,
         profiles: dict[str, AgentProfile],
         info: SerializationInfo,
     ) -> dict[str, Any]:
         return {
-            name: p.model_dump(mode='json', context=info.context)
+            name: p.model_dump(mode="json", context=info.context)
             for name, p in profiles.items()
         }

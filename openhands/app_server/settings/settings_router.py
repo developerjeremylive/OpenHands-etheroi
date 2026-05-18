@@ -56,13 +56,13 @@ from openhands.sdk.settings import (
 )
 
 LITE_LLM_API_URL = os.environ.get(
-    'LITE_LLM_API_URL', 'https://llm-proxy.app.all-hands.dev'
+    "LITE_LLM_API_URL", "https://llm-proxy.app.all-hands.dev"
 )
 
 # Create router with /api/v1/settings prefix
 router = APIRouter(
-    prefix='/settings',
-    tags=['Settings'],
+    prefix="/settings",
+    tags=["Settings"],
     dependencies=get_dependencies(),
 )
 
@@ -89,11 +89,11 @@ def _post_merge_llm_fixups(settings: Settings) -> None:
 # a response object directly. We document the possible responses using the 'responses'
 # parameter and maintain proper type annotations for mypy.
 @router.get(
-    '',
+    "",
     response_model=GETSettingsModel,
     responses={
-        404: {'description': 'Settings not found', 'model': dict},
-        401: {'description': 'Invalid token', 'model': dict},
+        404: {"description": "Settings not found", "model": dict},
+        401: {"description": "Invalid token", "model": dict},
     },
 )
 async def load_settings(
@@ -118,7 +118,7 @@ async def load_settings(
         if not settings:
             return JSONResponse(
                 status_code=status.HTTP_404_NOT_FOUND,
-                content={'error': 'Settings not found'},
+                content={"error": "Settings not found"},
             )
 
         # On initial load, user secrets may not be populated with values migrated from settings store
@@ -139,7 +139,7 @@ async def load_settings(
 
         llm = settings.agent_settings.llm
         settings_with_token_data = GETSettingsModel(
-            **settings.model_dump(exclude={'secrets_store'}),
+            **settings.model_dump(exclude={"secrets_store"}),
             llm_api_key_set=settings.llm_api_key_is_set,
             search_api_key_set=settings.search_api_key is not None
             and bool(settings.search_api_key),
@@ -150,14 +150,14 @@ async def load_settings(
         # if the base_url is the OpenHands proxy. Custom litellm_proxy endpoints
         # should keep their litellm_proxy/ prefix.
         resp_llm = settings_with_token_data.agent_settings.llm
-        normalized_base = (llm.base_url or '').rstrip('/')
-        normalized_proxy = LITE_LLM_API_URL.rstrip('/')
+        normalized_base = (llm.base_url or "").rstrip("/")
+        normalized_proxy = LITE_LLM_API_URL.rstrip("/")
 
-        if resp_llm.model and resp_llm.model.startswith('litellm_proxy/'):
+        if resp_llm.model and resp_llm.model.startswith("litellm_proxy/"):
             # Only convert to openhands/ if using the OpenHands proxy URL
             if normalized_base == normalized_proxy:
                 resp_llm.model = (
-                    f'openhands/{resp_llm.model.removeprefix("litellm_proxy/")}'
+                    f"openhands/{resp_llm.model.removeprefix('litellm_proxy/')}"
                 )
 
         # If the base url matches the default for the provider, we don't send it
@@ -173,28 +173,28 @@ async def load_settings(
         settings_with_token_data.sandbox_api_key = None
         return settings_with_token_data
     except Exception as e:
-        logger.warning(f'Invalid token: {e}')
+        logger.warning(f"Invalid token: {e}")
         # Get user_id from settings if available
-        user_id = getattr(settings, 'user_id', 'unknown') if settings else 'unknown'
+        user_id = getattr(settings, "user_id", "unknown") if settings else "unknown"
         logger.info(
-            f'Returning 401 Unauthorized - Invalid token for user_id: {user_id}'
+            f"Returning 401 Unauthorized - Invalid token for user_id: {user_id}"
         )
         return JSONResponse(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            content={'error': 'Invalid token'},
+            content={"error": "Invalid token"},
         )
 
 
 @router.post(
-    '',
+    "",
     response_model=None,
     responses={
-        200: {'description': 'Settings stored successfully', 'model': dict},
+        200: {"description": "Settings stored successfully", "model": dict},
         422: {
-            'description': 'Legacy nested settings keys are not accepted',
-            'model': dict,
+            "description": "Legacy nested settings keys are not accepted",
+            "model": dict,
         },
-        500: {'description': 'Error storing settings', 'model': dict},
+        500: {"description": "Error storing settings", "model": dict},
     },
 )
 async def store_settings(
@@ -214,14 +214,14 @@ async def store_settings(
         500: Error storing settings
     """
     legacy_nested_keys = sorted(
-        key for key in ('agent_settings', 'conversation_settings') if key in payload
+        key for key in ("agent_settings", "conversation_settings") if key in payload
     )
     if legacy_nested_keys:
         return JSONResponse(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             content={
-                'error': 'Use *_diff nested settings payloads instead of legacy keys',
-                'keys': legacy_nested_keys,
+                "error": "Use *_diff nested settings payloads instead of legacy keys",
+                "keys": legacy_nested_keys,
             },
         )
 
@@ -233,7 +233,7 @@ async def store_settings(
         _post_merge_llm_fixups(settings)
 
         if existing_settings:
-            if 'search_api_key' not in payload and settings.search_api_key is None:
+            if "search_api_key" not in payload and settings.search_api_key is None:
                 settings.search_api_key = existing_settings.search_api_key
             if settings.user_consents_to_analytics is None:
                 settings.user_consents_to_analytics = (
@@ -263,30 +263,30 @@ async def store_settings(
                     settings_changed=settings_changed,
                 )
         except Exception:
-            logger.exception('analytics:settings_saved:failed')
+            logger.exception("analytics:settings_saved:failed")
 
         return JSONResponse(
             status_code=status.HTTP_200_OK,
-            content={'message': 'Settings stored'},
+            content={"message": "Settings stored"},
         )
     except Exception as e:
-        logger.warning(f'Something went wrong storing settings: {e}')
+        logger.warning(f"Something went wrong storing settings: {e}")
         return JSONResponse(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            content={'error': 'Something went wrong storing settings'},
+            content={"error": "Something went wrong storing settings"},
         )
 
 
-@router.get('/agent-schema')
+@router.get("/agent-schema")
 async def load_settings_schema() -> dict[str, Any]:
     """Load the schema for settings"""
-    return export_agent_settings_schema().model_dump(mode='json')
+    return export_agent_settings_schema().model_dump(mode="json")
 
 
-@router.get('/conversation-schema')
+@router.get("/conversation-schema")
 async def load_conversation_settings_schema() -> dict[str, Any]:
     """Load the schema for conversations"""
-    return ConversationSettings.export_schema().model_dump(mode='json')
+    return ConversationSettings.export_schema().model_dump(mode="json")
 
 
 async def invalidate_legacy_secrets_store(
@@ -302,7 +302,7 @@ async def invalidate_legacy_secrets_store(
 
         # Invalidate old tokens via settings store serializer
         invalidated_secrets_settings = settings.model_copy(
-            update={'secrets_store': Secrets()}
+            update={"secrets_store": Secrets()}
         )
         await settings_store.store(invalidated_secrets_settings)
 
@@ -317,7 +317,7 @@ async def invalidate_legacy_secrets_store(
 # blocks empty names, path-traversal fragments, slash-in-name routing
 # ambiguity, and pathological long inputs. Applied via ``Path`` so FastAPI
 # rejects the request before the handler runs.
-_NAME_PATTERN = r'^[A-Za-z0-9._-]{1,64}$'
+_NAME_PATTERN = r"^[A-Za-z0-9._-]{1,64}$"
 ProfileName = Annotated[
     str,
     Path(min_length=1, max_length=64, pattern=_NAME_PATTERN),
@@ -334,7 +334,7 @@ _user_profile_locks: defaultdict[str, asyncio.Lock] = defaultdict(asyncio.Lock)
 
 
 def _profile_lock_key(user_id: str | None) -> str:
-    return user_id or '<anonymous>'
+    return user_id or "<anonymous>"
 
 
 class ProfileInfo(BaseModel):
@@ -350,7 +350,7 @@ class ProfileInfo(BaseModel):
     """
 
     name: str
-    agent_kind: str = 'openhands'
+    agent_kind: str = "openhands"
     model: str | None = None
     acp_server: str | None = None
     acp_model: str | None = None
@@ -391,7 +391,7 @@ class ActivateProfileResponse(BaseModel):
 
     name: str
     message: str
-    agent_kind: str = 'openhands'
+    agent_kind: str = "openhands"
     model: str | None = None
     acp_server: str | None = None
 
@@ -435,7 +435,7 @@ class SaveProfileRequest(BaseModel):
     llm: StrictLLM | None = None
 
 
-@router.get('/profiles', response_model=ProfileListResponse)
+@router.get("/profiles", response_model=ProfileListResponse)
 async def list_profiles(
     settings: Settings | None = Depends(get_user_settings),
 ) -> ProfileListResponse:
@@ -452,7 +452,7 @@ async def list_profiles(
     )
 
 
-@router.get('/profiles/{name}', response_model=ProfileDetailResponse)
+@router.get("/profiles/{name}", response_model=ProfileDetailResponse)
 async def get_profile(
     name: ProfileName,
     settings: Settings | None = Depends(get_user_settings),
@@ -470,14 +470,14 @@ async def get_profile(
         )
 
     api_key_set = has_real_api_key(profile.api_key)
-    config = profile.model_dump(mode='json')
-    config['api_key'] = None  # never echo a mask; use api_key_set instead
+    config = profile.model_dump(mode="json")
+    config["api_key"] = None  # never echo a mask; use api_key_set instead
 
     return ProfileDetailResponse(name=name, config=config, api_key_set=api_key_set)
 
 
 @router.post(
-    '/profiles/{name}',
+    "/profiles/{name}",
     response_model=ProfileMutationResponse,
     status_code=status.HTTP_201_CREATED,
 )
@@ -505,7 +505,7 @@ async def save_profile(
         if settings is None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail='Settings not found',
+                detail="Settings not found",
             )
 
         # Resolve which AgentProfile to save:
@@ -521,19 +521,21 @@ async def save_profile(
                 existing = settings.llm_profiles.get(name)
                 if existing is not None and existing.api_key is not None:
                     agent_profile = agent_profile.model_copy(
-                        update={'api_key': existing.api_key}
+                        update={"api_key": existing.api_key}
                     )
         elif request.llm is not None:
             llm = request.llm
             if llm.api_key is None:
                 existing = settings.llm_profiles.get(name)
                 if existing is not None and existing.api_key is not None:
-                    llm = llm.model_copy(update={'api_key': existing.api_key})
+                    llm = llm.model_copy(update={"api_key": existing.api_key})
             agent_profile = AgentProfile.from_llm(llm)
         else:
-            agent_profile = AgentProfile.from_acp_settings(settings.agent_settings) \
-                if isinstance(settings.agent_settings, ACPAgentSettings) \
+            agent_profile = (
+                AgentProfile.from_acp_settings(settings.agent_settings)
+                if isinstance(settings.agent_settings, ACPAgentSettings)
                 else AgentProfile.from_llm(settings.agent_settings.llm)
+            )
 
         try:
             settings.llm_profiles.save(
@@ -550,7 +552,7 @@ async def save_profile(
     return ProfileMutationResponse(name=name, message=f"Profile '{name}' saved")
 
 
-@router.delete('/profiles/{name}', response_model=ProfileMutationResponse)
+@router.delete("/profiles/{name}", response_model=ProfileMutationResponse)
 async def delete_profile(
     name: ProfileName,
     user_id: str | None = Depends(get_user_id),
@@ -568,7 +570,7 @@ async def delete_profile(
     return ProfileMutationResponse(name=name, message=f"Profile '{name}' deleted")
 
 
-@router.post('/profiles/{name}/activate', response_model=ActivateProfileResponse)
+@router.post("/profiles/{name}/activate", response_model=ActivateProfileResponse)
 async def activate_profile(
     name: ProfileName,
     user_id: str | None = Depends(get_user_id),
@@ -606,7 +608,7 @@ async def activate_profile(
     return ActivateProfileResponse(
         name=name,
         message=f"Switched to profile '{name}'",
-        agent_kind=profile.agent_kind if profile else 'openhands',
+        agent_kind=profile.agent_kind if profile else "openhands",
         model=settings.agent_settings.llm.model,
         acp_server=settings.agent_settings.acp_server
         if isinstance(settings.agent_settings, ACPAgentSettings)
@@ -614,7 +616,7 @@ async def activate_profile(
     )
 
 
-@router.post('/profiles/{name}/rename', response_model=ProfileMutationResponse)
+@router.post("/profiles/{name}/rename", response_model=ProfileMutationResponse)
 async def rename_profile(
     name: ProfileName,
     request: RenameProfileRequest,
@@ -632,7 +634,7 @@ async def rename_profile(
         if settings is None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail='Settings not found',
+                detail="Settings not found",
             )
         try:
             settings.llm_profiles.rename(name, request.new_name)
