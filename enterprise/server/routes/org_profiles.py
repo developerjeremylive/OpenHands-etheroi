@@ -10,7 +10,8 @@ Permission model:
   two side effects rather than the per-member one.
 """
 
-from typing import Any
+import contextlib
+from typing import Any, AsyncIterator
 from uuid import UUID
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Path, status
@@ -20,6 +21,7 @@ from server.routes.org_models import (
     _validate_persisted_agent_settings,
 )
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 from storage.database import a_session_maker
 from storage.org import Org
 from storage.org_member import OrgMember
@@ -33,7 +35,6 @@ from openhands.app_server.settings.llm_profiles import (
     StrictLLM,
 )
 from openhands.app_server.utils.logger import openhands_logger as logger
-from openhands.sdk.llm import LLM
 
 from ..auth.authorization import Permission, require_permission
 
@@ -119,43 +120,39 @@ async def _get_org(org_id: UUID, user_id: str) -> Org:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
 
 
-async def _save_org_profiles(org_id: UUID, profiles: LLMProfiles) -> None:
-    """Persist profiles to org row."""
+@contextlib.asynccontextmanager
+async def _org_profiles_transaction(
+    org_id: UUID, user_id: str
+) -> AsyncIterator[tuple[AsyncSession, Org, LLMProfiles]]:
+    """Yield ``(session, org, profiles)`` for a single locked mutation.
+
+    Wraps read → mutate → write in one session with ``SELECT ... FOR UPDATE``
+    so concurrent profile mutations serialize at the database level instead
+    of racing on the ``llm_profiles`` column (last-writer-wins would silently
+    drop the loser's changes). The caller mutates ``profiles`` in place; on
+    normal exit the helper serializes it back onto the org row and commits.
+    Exceptions skip the commit, so partial state never lands — useful for
+    multi-write endpoints like activate that also update ``OrgMember``.
+    """
+    # Membership/access check (perms are enforced by the route's Depends; this
+    # is the same org-membership check the read endpoints do via _get_org).
+    await _get_org(org_id, user_id)
+
     async with a_session_maker() as session:
-        result = await session.execute(select(Org).filter(Org.id == org_id))
+        result = await session.execute(
+            select(Org).filter(Org.id == org_id).with_for_update()
+        )
         org = result.scalars().first()
         if org is None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f'Organization {org_id} not found',
             )
+        profiles = _load_profiles(org)
+        yield session, org, profiles
         org.llm_profiles = profiles.model_dump(
             mode='json', context={'expose_secrets': True}
         )
-        await session.commit()
-
-
-async def _activate_profile_for_member(
-    org_id: UUID, user_id: str, profile_name: str, llm: LLM
-) -> None:
-    """Update member's agent_settings_diff with the activated profile's LLM config."""
-    async with a_session_maker() as session:
-        result = await session.execute(
-            select(OrgMember).filter(
-                OrgMember.org_id == org_id, OrgMember.user_id == user_id
-            )
-        )
-        member = result.scalars().first()
-        if member is None:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail='Organization membership not found',
-            )
-
-        llm_dump = llm.model_dump(mode='json', context={'expose_secrets': True})
-        member_diff = dict(member.agent_settings_diff or {})
-        member_diff['llm'] = llm_dump
-        member.agent_settings_diff = member_diff
         await session.commit()
 
 
@@ -208,24 +205,22 @@ async def save_profile(
 
     If ``llm`` is omitted, saves a copy of the current org LLM defaults.
     """
-    org = await _get_org(org_id, user_id)
-    profiles = _load_profiles(org)
-
-    try:
-        if request.llm is not None:
-            profiles.save(name, request.llm, include_secrets=request.include_secrets)
-        else:
-            # Snapshot current org LLM settings. Route through the persisted
-            # loader so legacy/canonical ``agent_kind`` discriminator values
-            # ('llm' vs 'openhands') both validate.
-            agent_settings = _validate_persisted_agent_settings(org.agent_settings)
-            profiles.save(
-                name, agent_settings.llm, include_secrets=request.include_secrets
-            )
-
-        await _save_org_profiles(org_id, profiles)
-    except ProfileLimitExceededError as exc:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
+    async with _org_profiles_transaction(org_id, user_id) as (_session, org, profiles):
+        try:
+            if request.llm is not None:
+                profiles.save(
+                    name, request.llm, include_secrets=request.include_secrets
+                )
+            else:
+                # Snapshot current org LLM settings. Route through the persisted
+                # loader so legacy/canonical ``agent_kind`` discriminator values
+                # ('llm' vs 'openhands') both validate.
+                agent_settings = _validate_persisted_agent_settings(org.agent_settings)
+                profiles.save(
+                    name, agent_settings.llm, include_secrets=request.include_secrets
+                )
+        except ProfileLimitExceededError as exc:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
 
     return ProfileMutationResponse(name=name, message=f"Profile '{name}' saved")
 
@@ -237,16 +232,17 @@ async def delete_profile(
     user_id: str = Depends(require_permission(Permission.EDIT_ORG_SETTINGS)),
 ) -> ProfileMutationResponse:
     """Delete an LLM profile."""
-    org = await _get_org(org_id, user_id)
-    profiles = _load_profiles(org)
+    async with _org_profiles_transaction(org_id, user_id) as (
+        _session,
+        _org,
+        profiles,
+    ):
+        if not profiles.delete(name):
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Profile '{name}' not found",
+            )
 
-    if not profiles.delete(name):
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Profile '{name}' not found",
-        )
-
-    await _save_org_profiles(org_id, profiles)
     return ProfileMutationResponse(name=name, message=f"Profile '{name}' deleted")
 
 
@@ -262,27 +258,44 @@ async def activate_profile(
 
     Two side effects: updates the org-wide ``profiles.active`` marker and
     writes the profile's LLM into the calling member's
-    ``agent_settings_diff``. Because the first is org-level state, this
-    requires ``EDIT_ORG_SETTINGS`` — matching the CRUD endpoints rather than
-    the read-only listing. For personal orgs the owner has the permission
-    natively; for team orgs this scopes "set org default profile" to admins.
+    ``agent_settings_diff``. Both writes share a single transaction so a
+    failure in the second can't leave the org marker advanced without the
+    member's settings catching up. Because the first effect is org-level
+    state, this requires ``EDIT_ORG_SETTINGS`` — matching the CRUD endpoints
+    rather than the read-only listing. For personal orgs the owner has the
+    permission natively; for team orgs this scopes "set org default profile"
+    to admins.
     """
-    org = await _get_org(org_id, user_id)
-    profiles = _load_profiles(org)
+    async with _org_profiles_transaction(org_id, user_id) as (
+        session,
+        _org,
+        profiles,
+    ):
+        llm = profiles.get(name)
+        if llm is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Profile '{name}' not found",
+            )
+        profiles.active = name
 
-    llm = profiles.get(name)
-    if llm is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Profile '{name}' not found",
+        # Same session as the org write so both side-effects commit atomically.
+        member_result = await session.execute(
+            select(OrgMember).filter(
+                OrgMember.org_id == org_id, OrgMember.user_id == user_id
+            )
         )
-
-    # Update org's active profile marker
-    profiles.active = name
-    await _save_org_profiles(org_id, profiles)
-
-    # Update member's personal LLM override
-    await _activate_profile_for_member(org_id, user_id, name, llm)
+        member = member_result.scalars().first()
+        if member is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail='Organization membership not found',
+            )
+        member_diff = dict(member.agent_settings_diff or {})
+        member_diff['llm'] = llm.model_dump(
+            mode='json', context={'expose_secrets': True}
+        )
+        member.agent_settings_diff = member_diff
 
     return ActivateProfileResponse(
         name=name,
@@ -299,16 +312,17 @@ async def rename_profile(
     user_id: str = Depends(require_permission(Permission.EDIT_ORG_SETTINGS)),
 ) -> ProfileMutationResponse:
     """Rename an LLM profile."""
-    org = await _get_org(org_id, user_id)
-    profiles = _load_profiles(org)
-
-    try:
-        profiles.rename(name, request.new_name)
-        await _save_org_profiles(org_id, profiles)
-    except ProfileNotFoundError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
-    except ProfileAlreadyExistsError as exc:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
+    async with _org_profiles_transaction(org_id, user_id) as (
+        _session,
+        _org,
+        profiles,
+    ):
+        try:
+            profiles.rename(name, request.new_name)
+        except ProfileNotFoundError as exc:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+        except ProfileAlreadyExistsError as exc:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
 
     return ProfileMutationResponse(
         name=request.new_name,
