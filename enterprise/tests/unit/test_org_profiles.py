@@ -1,19 +1,39 @@
-"""Unit tests for organization LLM profiles router."""
+"""Unit and integration tests for organization LLM profiles router."""
 
 import uuid
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
-from server.routes.org_profiles import (
-    ProfileListResponse,
-    ProfileMutationResponse,
-    RenameProfileRequest,
-    SaveProfileRequest,
-    _load_profiles,
-)
+from fastapi import HTTPException
+from sqlalchemy import select
 from storage.org import Org
+from storage.org_member import OrgMember
+from storage.role import Role
+from storage.user import User
 
-from openhands.app_server.settings.llm_profiles import LLMProfiles, StrictLLM
+from openhands.app_server.settings.llm_profiles import (
+    MAX_PROFILES_PER_USER,
+    LLMProfiles,
+    StrictLLM,
+)
+
+# Mock the database module before importing the router — matches the
+# test_saas_settings_store.py pattern so module-level imports don't try to
+# touch a real engine.
+with patch('storage.database.a_session_maker'):
+    from server.routes.org_profiles import (
+        ProfileListResponse,
+        ProfileMutationResponse,
+        RenameProfileRequest,
+        SaveProfileRequest,
+        _load_profiles,
+        activate_profile,
+        delete_profile,
+        get_profile,
+        list_profiles,
+        rename_profile,
+        save_profile,
+    )
 
 
 @pytest.fixture
@@ -144,3 +164,301 @@ class TestRenameProfileRequest:
         # Should reject too-long names (max_length=100)
         with pytest.raises(ValueError):
             RenameProfileRequest(new_name='a' * 101)
+
+
+# ── Integration tests ──────────────────────────────────────────────────────
+#
+# Exercise the route handlers end-to-end against a real SQLite-backed Org +
+# OrgMember row. They verify the new ``SELECT FOR UPDATE`` transaction helper
+# round-trips correctly, the activate handler writes both the org marker and
+# the member diff atomically, and the exception-to-HTTP mapping for the
+# 404/409 paths.
+
+ORG_ID = uuid.UUID('5594c7b6-f959-4b81-92e9-b09c206f5081')
+ADMIN_USER_ID = uuid.UUID('5594c7b6-f959-4b81-92e9-b09c206f5082')
+
+
+@pytest.fixture
+def seeded_org(session_maker):
+    """Create a personal-org-shaped row with one admin member."""
+    with session_maker() as session:
+        session.add(Role(id=10, name='member', rank=3))
+        session.add(
+            Org(
+                id=ORG_ID,
+                name='profile-test-org',
+                org_version=1,
+                enable_proactive_conversation_starters=True,
+            )
+        )
+        session.add(
+            User(
+                id=ADMIN_USER_ID,
+                current_org_id=ORG_ID,
+                user_consents_to_analytics=True,
+            )
+        )
+        session.add(
+            OrgMember(
+                org_id=ORG_ID,
+                user_id=ADMIN_USER_ID,
+                role_id=10,
+                llm_api_key='initial-key',
+                agent_settings_diff={
+                    'llm': {'model': 'before-activate', 'base_url': None},
+                },
+                conversation_settings_diff={},
+                status='active',
+            )
+        )
+        session.commit()
+    return {'org_id': ORG_ID, 'admin_user_id': ADMIN_USER_ID}
+
+
+@pytest.fixture
+def patch_route_db(async_session_maker, seeded_org):
+    """Wire the router's db session + OrgService.get_org_by_id to the test
+    SQLite fixture so direct handler calls hit the real schema. ``get_org_by_id``
+    is patched (rather than seeding the full membership graph) because its
+    inner OrgMemberStore call opens sessions outside ``async_session_maker``.
+    """
+    org_id = seeded_org['org_id']
+
+    async def _fake_get_org(org_id, user_id):  # noqa: ARG001
+        async with async_session_maker() as session:
+            result = await session.execute(select(Org).where(Org.id == org_id))
+            return result.scalars().first()
+
+    with (
+        patch(
+            'server.routes.org_profiles.a_session_maker',
+            async_session_maker,
+        ),
+        patch(
+            'server.routes.org_profiles.OrgService.get_org_by_id',
+            side_effect=_fake_get_org,
+        ),
+    ):
+        yield org_id
+
+
+async def _read_org(async_session_maker, org_id):
+    async with async_session_maker() as session:
+        result = await session.execute(select(Org).where(Org.id == org_id))
+        return result.scalars().first()
+
+
+async def _read_member(async_session_maker, org_id, user_id):
+    async with async_session_maker() as session:
+        result = await session.execute(
+            select(OrgMember).where(
+                OrgMember.org_id == org_id, OrgMember.user_id == user_id
+            )
+        )
+        return result.scalars().first()
+
+
+class TestProfileLifecycleIntegration:
+    """Round-trip CRUD against a real Org row."""
+
+    @pytest.mark.asyncio
+    async def test_save_then_list_persists_profile(
+        self, async_session_maker, patch_route_db
+    ):
+        org_id = patch_route_db
+
+        await save_profile(
+            org_id=org_id,
+            name='work',
+            request=SaveProfileRequest(
+                llm=StrictLLM(model='anthropic/claude-3-5-sonnet')
+            ),
+            user_id=str(ADMIN_USER_ID),
+        )
+
+        listing = await list_profiles(org_id=org_id, user_id=str(ADMIN_USER_ID))
+        assert [p.name for p in listing.profiles] == ['work']
+        assert listing.profiles[0].model == 'anthropic/claude-3-5-sonnet'
+        assert listing.active_profile is None
+
+    @pytest.mark.asyncio
+    async def test_get_profile_returns_details_without_secret(
+        self, async_session_maker, patch_route_db
+    ):
+        org_id = patch_route_db
+
+        await save_profile(
+            org_id=org_id,
+            name='work',
+            request=SaveProfileRequest(
+                llm=StrictLLM(
+                    model='anthropic/claude-3-5-sonnet',
+                    api_key='secret-value',
+                )
+            ),
+            user_id=str(ADMIN_USER_ID),
+        )
+
+        detail = await get_profile(
+            org_id=org_id, name='work', user_id=str(ADMIN_USER_ID)
+        )
+        assert detail.name == 'work'
+        assert detail.llm['model'] == 'anthropic/claude-3-5-sonnet'
+        # ``expose_secrets=False`` on the response — the key must not echo.
+        assert detail.llm.get('api_key') in (None, '')
+
+    @pytest.mark.asyncio
+    async def test_delete_removes_profile_and_repeat_returns_404(
+        self, async_session_maker, patch_route_db
+    ):
+        org_id = patch_route_db
+
+        await save_profile(
+            org_id=org_id,
+            name='gone',
+            request=SaveProfileRequest(llm=StrictLLM(model='openai/gpt-4o')),
+            user_id=str(ADMIN_USER_ID),
+        )
+        await delete_profile(org_id=org_id, name='gone', user_id=str(ADMIN_USER_ID))
+
+        listing = await list_profiles(org_id=org_id, user_id=str(ADMIN_USER_ID))
+        assert listing.profiles == []
+
+        with pytest.raises(HTTPException) as exc:
+            await delete_profile(org_id=org_id, name='gone', user_id=str(ADMIN_USER_ID))
+        assert exc.value.status_code == 404
+
+
+class TestProfileErrorPaths:
+    """Exception-to-HTTP mapping for the mutating endpoints."""
+
+    @pytest.mark.asyncio
+    async def test_save_raises_409_at_profile_limit(
+        self, async_session_maker, patch_route_db
+    ):
+        org_id = patch_route_db
+        # Fill to the cap, then attempt a new name.
+        for i in range(MAX_PROFILES_PER_USER):
+            await save_profile(
+                org_id=org_id,
+                name=f'p{i}',
+                request=SaveProfileRequest(llm=StrictLLM(model=f'openai/m-{i}')),
+                user_id=str(ADMIN_USER_ID),
+            )
+
+        with pytest.raises(HTTPException) as exc:
+            await save_profile(
+                org_id=org_id,
+                name='overflow',
+                request=SaveProfileRequest(llm=StrictLLM(model='openai/m-x')),
+                user_id=str(ADMIN_USER_ID),
+            )
+        assert exc.value.status_code == 409
+
+    @pytest.mark.asyncio
+    async def test_rename_raises_409_on_name_collision(
+        self, async_session_maker, patch_route_db
+    ):
+        org_id = patch_route_db
+
+        for name in ('a', 'b'):
+            await save_profile(
+                org_id=org_id,
+                name=name,
+                request=SaveProfileRequest(llm=StrictLLM(model=f'openai/{name}')),
+                user_id=str(ADMIN_USER_ID),
+            )
+
+        with pytest.raises(HTTPException) as exc:
+            await rename_profile(
+                org_id=org_id,
+                name='a',
+                request=RenameProfileRequest(new_name='b'),
+                user_id=str(ADMIN_USER_ID),
+            )
+        assert exc.value.status_code == 409
+
+    @pytest.mark.asyncio
+    async def test_activate_raises_404_for_unknown_profile(
+        self, async_session_maker, patch_route_db
+    ):
+        org_id = patch_route_db
+
+        with pytest.raises(HTTPException) as exc:
+            await activate_profile(
+                org_id=org_id, name='missing', user_id=str(ADMIN_USER_ID)
+            )
+        assert exc.value.status_code == 404
+
+
+class TestActivateTransactionAtomicity:
+    """Activate must commit the org marker and the member diff together."""
+
+    @pytest.mark.asyncio
+    async def test_writes_org_active_and_member_diff_together(
+        self, async_session_maker, patch_route_db
+    ):
+        org_id = patch_route_db
+        await save_profile(
+            org_id=org_id,
+            name='work',
+            request=SaveProfileRequest(
+                llm=StrictLLM(
+                    model='anthropic/claude-3-5-sonnet',
+                    base_url='https://api.anthropic.com/v1',
+                    api_key='activate-key',
+                )
+            ),
+            user_id=str(ADMIN_USER_ID),
+        )
+
+        await activate_profile(org_id=org_id, name='work', user_id=str(ADMIN_USER_ID))
+
+        org = await _read_org(async_session_maker, org_id)
+        assert org is not None
+        assert _load_profiles(org).active == 'work'
+
+        member = await _read_member(async_session_maker, org_id, ADMIN_USER_ID)
+        assert member is not None
+        assert (
+            member.agent_settings_diff['llm']['model'] == 'anthropic/claude-3-5-sonnet'
+        )
+
+    @pytest.mark.asyncio
+    async def test_member_lookup_failure_rolls_back_org_active(
+        self, async_session_maker, patch_route_db
+    ):
+        """If the member row vanishes between perm-check and the same-session
+        member read, the helper must roll back the org-side update so we
+        don't end up with the org marker advanced without the member diff
+        applied.
+        """
+        org_id = patch_route_db
+        await save_profile(
+            org_id=org_id,
+            name='work',
+            request=SaveProfileRequest(llm=StrictLLM(model='openai/gpt-4o')),
+            user_id=str(ADMIN_USER_ID),
+        )
+        # Sanity: no active profile yet.
+        org_before = await _read_org(async_session_maker, org_id)
+        assert _load_profiles(org_before).active is None
+
+        # Drop the member row so the in-transaction lookup raises 404.
+        async with async_session_maker() as session:
+            result = await session.execute(
+                select(OrgMember).where(OrgMember.org_id == org_id)
+            )
+            member = result.scalars().first()
+            await session.delete(member)
+            await session.commit()
+
+        with pytest.raises(HTTPException) as exc:
+            await activate_profile(
+                org_id=org_id, name='work', user_id=str(ADMIN_USER_ID)
+            )
+        assert exc.value.status_code == 404
+
+        org_after = await _read_org(async_session_maker, org_id)
+        # No commit happened → org.active stays None.
+        assert _load_profiles(org_after).active is None
