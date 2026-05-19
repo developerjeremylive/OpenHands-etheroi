@@ -280,9 +280,12 @@ async def activate_profile(
         profiles.active = name
 
         # Same session as the org write so both side-effects commit atomically.
+        # Cast ``user_id`` explicitly: Postgres' UUID type tolerates string
+        # coercion, but SQLAlchemy's generic Uuid binding (used under SQLite
+        # in tests) doesn't.
         member_result = await session.execute(
             select(OrgMember).filter(
-                OrgMember.org_id == org_id, OrgMember.user_id == user_id
+                OrgMember.org_id == org_id, OrgMember.user_id == UUID(user_id)
             )
         )
         member = member_result.scalars().first()

@@ -249,10 +249,13 @@ async def _read_org(async_session_maker, org_id):
 
 
 async def _read_member(async_session_maker, org_id, user_id):
+    # ``user_id`` accepts either str or UUID — coerce so the SQLite test
+    # backend's strict Uuid binding doesn't error on str inputs.
+    user_uuid = user_id if isinstance(user_id, uuid.UUID) else uuid.UUID(user_id)
     async with async_session_maker() as session:
         result = await session.execute(
             select(OrgMember).where(
-                OrgMember.org_id == org_id, OrgMember.user_id == user_id
+                OrgMember.org_id == org_id, OrgMember.user_id == user_uuid
             )
         )
         return result.scalars().first()
@@ -304,8 +307,10 @@ class TestProfileLifecycleIntegration:
         )
         assert detail.name == 'work'
         assert detail.llm['model'] == 'anthropic/claude-3-5-sonnet'
-        # ``expose_secrets=False`` on the response — the key must not echo.
-        assert detail.llm.get('api_key') in (None, '')
+        # ``expose_secrets=False`` on the response masks the secret rather
+        # than dropping it (so the response shape is stable). Just confirm
+        # the raw value never leaks back.
+        assert detail.llm.get('api_key') != 'secret-value'
 
     @pytest.mark.asyncio
     async def test_delete_removes_profile_and_repeat_returns_404(
