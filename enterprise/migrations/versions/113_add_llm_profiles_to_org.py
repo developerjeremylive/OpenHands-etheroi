@@ -7,6 +7,11 @@ workspaces (where the owner manages their own profiles) and team organizations
 The column uses EncryptedJSON (stored as String) because profiles can contain
 per-profile API keys that must be encrypted at rest.
 
+Data migration: no backfill. Existing orgs read back with ``llm_profiles =
+NULL`` and ``_load_profiles`` treats that as an empty ``LLMProfiles``. The
+first save through the ``/api/organizations/{org_id}/profiles`` endpoints
+populates the column lazily, so no downtime or follow-up script is required.
+
 Revision ID: 113
 Revises: 112
 Create Date: 2025-05-13

@@ -5,14 +5,16 @@ the organization and can be activated by members.
 
 Permission model:
 - CRUD (create, update, delete, rename): Requires EDIT_ORG_SETTINGS (owner/admin)
-- Activate: Requires VIEW_ORG_SETTINGS (any member)
+- Activate: Requires EDIT_ORG_SETTINGS — the handler also writes the org-wide
+  ``profiles.active`` marker, so the permission must match the bigger of the
+  two side effects rather than the per-member one.
 """
 
 from typing import Any
 from uuid import UUID
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Path, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 from server.routes.org_models import (
     OrgNotFoundError,
     _validate_persisted_agent_settings,
@@ -101,7 +103,10 @@ def _load_profiles(org: Org) -> LLMProfiles:
         return LLMProfiles()
     try:
         return LLMProfiles.model_validate(org.llm_profiles)
-    except Exception as exc:
+    except ValidationError as exc:
+        # Schema drift / partially-invalid stored profiles: degrade to empty
+        # rather than 500-ing. Other exceptions (DB decrypt failures, etc.)
+        # bubble up so they're surfaced instead of silently masked.
         logger.warning('Failed to load org profiles for %s: %s', org.id, exc)
         return LLMProfiles()
 
@@ -251,12 +256,16 @@ async def delete_profile(
 async def activate_profile(
     org_id: UUID,
     name: str = Path(..., min_length=1),
-    user_id: str = Depends(require_permission(Permission.VIEW_ORG_SETTINGS)),
+    user_id: str = Depends(require_permission(Permission.EDIT_ORG_SETTINGS)),
 ) -> ActivateProfileResponse:
     """Activate a profile for the current user.
 
-    Updates the user's org member settings diff with the profile's LLM config.
-    Any member can activate a profile (VIEW_ORG_SETTINGS permission).
+    Two side effects: updates the org-wide ``profiles.active`` marker and
+    writes the profile's LLM into the calling member's
+    ``agent_settings_diff``. Because the first is org-level state, this
+    requires ``EDIT_ORG_SETTINGS`` — matching the CRUD endpoints rather than
+    the read-only listing. For personal orgs the owner has the permission
+    natively; for team orgs this scopes "set org default profile" to admins.
     """
     org = await _get_org(org_id, user_id)
     profiles = _load_profiles(org)
