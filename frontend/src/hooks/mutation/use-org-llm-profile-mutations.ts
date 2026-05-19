@@ -3,7 +3,24 @@ import OrgProfilesService, {
   SaveOrgLlmProfileRequest,
 } from "#/api/organization-service/org-profiles-service.api";
 import { ORG_LLM_PROFILES_QUERY_KEY } from "#/hooks/query/use-org-llm-profiles";
+import { LLM_PROFILES_QUERY_KEY } from "#/hooks/query/use-llm-profiles";
 import { SETTINGS_QUERY_KEYS } from "#/hooks/query/query-keys";
+
+// The chat-layer switch button and /model command read the personal
+// profiles query (/api/v1/settings/profiles), which surfaces org profiles
+// in SaaS mode via SaasSettingsStore. Invalidate that cache too so those
+// surfaces refresh after org-side CRUD without a full reload.
+const invalidateProfileCaches = (
+  queryClient: ReturnType<typeof useQueryClient>,
+  orgId: string | null | undefined,
+) => {
+  queryClient.invalidateQueries({
+    queryKey: [ORG_LLM_PROFILES_QUERY_KEY, orgId],
+  });
+  queryClient.invalidateQueries({
+    queryKey: [LLM_PROFILES_QUERY_KEY],
+  });
+};
 
 export function useSaveOrgLlmProfile(orgId: string | null | undefined) {
   const queryClient = useQueryClient();
@@ -20,9 +37,7 @@ export function useSaveOrgLlmProfile(orgId: string | null | undefined) {
       await OrgProfilesService.saveProfile(orgId, name, request ?? {});
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({
-        queryKey: [ORG_LLM_PROFILES_QUERY_KEY, orgId],
-      });
+      invalidateProfileCaches(queryClient, orgId);
     },
   });
 }
@@ -36,9 +51,7 @@ export function useDeleteOrgLlmProfile(orgId: string | null | undefined) {
       await OrgProfilesService.deleteProfile(orgId, name);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({
-        queryKey: [ORG_LLM_PROFILES_QUERY_KEY, orgId],
-      });
+      invalidateProfileCaches(queryClient, orgId);
     },
   });
 }
@@ -52,9 +65,7 @@ export function useActivateOrgLlmProfile(orgId: string | null | undefined) {
       await OrgProfilesService.activateProfile(orgId, name);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({
-        queryKey: [ORG_LLM_PROFILES_QUERY_KEY, orgId],
-      });
+      invalidateProfileCaches(queryClient, orgId);
       // Also invalidate settings since the active LLM config changed
       queryClient.invalidateQueries({
         queryKey: SETTINGS_QUERY_KEYS.byScope("org", orgId),
@@ -78,9 +89,7 @@ export function useRenameOrgLlmProfile(orgId: string | null | undefined) {
       await OrgProfilesService.renameProfile(orgId, name, newName);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({
-        queryKey: [ORG_LLM_PROFILES_QUERY_KEY, orgId],
-      });
+      invalidateProfileCaches(queryClient, orgId);
     },
   });
 }

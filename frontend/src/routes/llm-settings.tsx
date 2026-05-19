@@ -251,8 +251,12 @@ export function LlmSettingsScreen({
         view === "basic"
           ? (selectedProvider ?? derivedProvider)
           : derivedProvider;
+      // Hide the api-key input only when editing personal active settings
+      // (the OpenHands proxy auto-fills the key from the session). For
+      // org-scope profile editing the snapshot needs an explicit api_key so
+      // it round-trips on activate/switch, so we always render the field.
       const shouldUseOpenHandsKey =
-        isSaasMode && activeProvider === "openhands";
+        isSaasMode && activeProvider === "openhands" && scope !== "org";
       const showOpenHandsApiKeyHelp = modelValue.startsWith("openhands/");
 
       const renderApiKeyInput = (testId: string, helpTestId: string) => {
@@ -424,8 +428,11 @@ export function LlmSettingsScreen({
         context.view === "basic"
           ? (selectedProvider ?? derivedProvider)
           : derivedProvider;
+      // Mirror the header rule: in org scope the form keeps a user-supplied
+      // api_key so the profile snapshot carries it; only the personal-saas
+      // path blanks the key (the proxy fills it at runtime).
       const shouldUseOpenHandsKey =
-        isSaasMode && activeProvider === "openhands";
+        isSaasMode && activeProvider === "openhands" && scope !== "org";
 
       const llm = (agentSettings.llm ?? {}) as Record<string, unknown>;
       if (shouldUseOpenHandsKey && llm.model !== undefined) {
@@ -448,7 +455,7 @@ export function LlmSettingsScreen({
 
       return { agent_settings_diff: agentSettings };
     },
-    [isSaasMode, schema, selectedProvider],
+    [isSaasMode, schema, scope, selectedProvider],
   );
 
   const handleSaveSuccess = React.useCallback(async () => {
