@@ -13,7 +13,10 @@ from uuid import UUID
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Path, status
 from pydantic import BaseModel, Field
-from server.routes.org_models import OrgNotFoundError
+from server.routes.org_models import (
+    OrgNotFoundError,
+    _validate_persisted_agent_settings,
+)
 from sqlalchemy import select
 from storage.database import a_session_maker
 from storage.org import Org
@@ -207,10 +210,10 @@ async def save_profile(
         if request.llm is not None:
             profiles.save(name, request.llm, include_secrets=request.include_secrets)
         else:
-            # Snapshot current org LLM settings
-            from openhands.sdk.settings import AgentSettings
-
-            agent_settings = AgentSettings.model_validate(org.agent_settings or {})
+            # Snapshot current org LLM settings. Route through the persisted
+            # loader so legacy/canonical ``agent_kind`` discriminator values
+            # ('llm' vs 'openhands') both validate.
+            agent_settings = _validate_persisted_agent_settings(org.agent_settings)
             profiles.save(
                 name, agent_settings.llm, include_secrets=request.include_secrets
             )

@@ -306,7 +306,7 @@ export function LlmSettingsScreen({
             </Typography.Paragraph>
           ) : null}
 
-          {scope === "personal" ? (
+          {shouldShowProfilesForScope ? (
             <ProfileNameInput
               testId="llm-profile-name-input"
               ruleTestId="llm-profile-name-rule"
@@ -393,6 +393,7 @@ export function LlmSettingsScreen({
       scope,
       selectedProvider,
       settings?.llm_api_key_set,
+      shouldShowProfilesForScope,
       t,
     ],
   );
