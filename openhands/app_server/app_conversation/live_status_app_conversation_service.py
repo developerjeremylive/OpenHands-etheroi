@@ -154,7 +154,28 @@ def _content_to_text(content: Sequence) -> str:
 _ABS_PATH_RE = re.compile(r'/[^\s\'",:}\]]{10,}')
 
 
-_EDIT_DIFF_KEYS = frozenset({'old_string', 'new_string', 'replace_all'})
+def _is_patch_edit(event: 'ACPToolCallEvent') -> bool:
+    """Return True if this edit event is a patch/diff, not a full-file write.
+
+    The ACP protocol's ``content`` field carries provider-agnostic diff blocks:
+    - Full-file create (Write): ``content[0].old_text is None``
+    - Patch edit (Edit): ``content[0].old_text`` is set (non-None)
+
+    Using the ``content`` field makes this check work across all ACP providers
+    (Claude Code, Codex, Gemini) regardless of their ``raw_input`` field names.
+    The ``old_string``/``new_string``/``replace_all`` field-name fallback is
+    kept for providers that omit the structured ``content`` but still expose
+    the diff intent through their raw input keys.
+    """
+    content = getattr(event, 'content', None) or []
+    if content:
+        first = content[0]
+        if getattr(first, 'type', None) == 'diff':
+            return getattr(first, 'old_text', None) is not None
+    # Fallback: Claude Code-specific field names in raw_input.
+    raw = dict(event.raw_input) if event.raw_input else {}
+    return bool({'old_string', 'new_string'} & raw.keys())
+
 
 # Pytest/terminal boilerplate lines to strip from command output.
 _TERMINAL_BOILERPLATE_RE = re.compile(
@@ -1648,7 +1669,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                 status = 'failed' if event.is_error else (event.status or 'completed')
                 name = event.title or event.tool_kind or 'tool'
                 raw_in = dict(event.raw_input) if event.raw_input else {}
-                is_edit_diff = bool(raw_in.keys() & _EDIT_DIFF_KEYS)
+                is_edit_diff = _is_patch_edit(event)
                 detail_parts: list[str] = []
                 if raw_in:
                     detail_parts.append(
