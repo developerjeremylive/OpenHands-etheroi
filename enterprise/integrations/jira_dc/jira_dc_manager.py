@@ -23,6 +23,7 @@ from integrations.utils import (
     markdown_to_jira_markup,
 )
 from jinja2 import Environment, FileSystemLoader
+from server.auth.constants import JIRA_DC_ENABLE_OAUTH
 from server.auth.saas_user_auth import get_user_auth_from_keycloak_id
 from server.auth.token_manager import TokenManager
 from storage.jira_dc_integration_store import JiraDcIntegrationStore
@@ -55,7 +56,13 @@ class JiraDcManager(Manager[JiraDcViewInterface]):
     ) -> tuple[JiraDcUser | None, UserAuth | None]:
         """Authenticate Jira DC user and get their OpenHands user auth."""
 
-        if not jira_dc_user_id or jira_dc_user_id == 'none':
+        # In email-match mode (OAuth disabled) the workspace link is stored with
+        # an 'unavailable' Jira account id, so the webhook's real Jira user key
+        # can never match a stored row. Resolve the user by matching their Jira
+        # email to their OpenHands email instead. In OAuth mode we resolve
+        # strictly by the verified Jira account id and never fall back to email,
+        # preserving the verification guarantee.
+        if not JIRA_DC_ENABLE_OAUTH or not jira_dc_user_id or jira_dc_user_id == 'none':
             # Get Keycloak user ID from email
             keycloak_user_id = await self.token_manager.get_user_id_from_user_email(
                 user_email

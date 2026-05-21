@@ -97,6 +97,48 @@ class TestAuthenticateUser:
         assert jira_dc_user is None
         assert user_auth is None
 
+    @pytest.mark.asyncio
+    async def test_authenticate_user_email_mode_matches_by_email(
+        self,
+        jira_dc_manager,
+        mock_token_manager,
+        sample_jira_dc_user,
+        sample_user_auth,
+    ):
+        """Resolve the user by email when OAuth is disabled (email-match mode).
+
+        Even though the webhook supplies a real Jira user key, the stored
+        workspace link carries the 'unavailable' sentinel rather than the
+        real key, so a key lookup would never match (the original bug).
+        """
+        mock_token_manager.get_user_id_from_user_email.return_value = (
+            'test_keycloak_id'
+        )
+        jira_dc_manager.integration_store.get_active_user_by_keycloak_id_and_workspace = AsyncMock(
+            return_value=sample_jira_dc_user
+        )
+
+        with patch(
+            'integrations.jira_dc.jira_dc_manager.JIRA_DC_ENABLE_OAUTH', False
+        ), patch(
+            'integrations.jira_dc.jira_dc_manager.get_user_auth_from_keycloak_id',
+            return_value=sample_user_auth,
+        ):
+            jira_dc_user, user_auth = await jira_dc_manager.authenticate_user(
+                'user@company.com', 'real_jira_key_from_webhook', 1
+            )
+
+        assert jira_dc_user == sample_jira_dc_user
+        assert user_auth == sample_user_auth
+        # Resolved by email, NOT by the webhook's Jira key.
+        mock_token_manager.get_user_id_from_user_email.assert_called_once_with(
+            'user@company.com'
+        )
+        jira_dc_manager.integration_store.get_active_user_by_keycloak_id_and_workspace.assert_called_once_with(
+            'test_keycloak_id', 1
+        )
+        jira_dc_manager.integration_store.get_active_user.assert_not_called()
+
 
 class TestGetRepositories:
     """Test repository retrieval functionality."""
