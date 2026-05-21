@@ -22,9 +22,7 @@ from pydantic import BaseModel
 from openhands.analytics import get_analytics_service, resolve_analytics_context
 from openhands.app_server.user_auth import get_user_id
 
-analytics_events_router = APIRouter(
-    prefix='/api/analytics/events', tags=['Analytics']
-)
+analytics_events_router = APIRouter(prefix='/api/analytics/events', tags=['Analytics'])
 
 logger = logging.getLogger(__name__)
 
@@ -37,9 +35,7 @@ class CreatePrButtonClickedPayload(BaseModel):
     PostHog as property values.
     """
 
-    git_provider: Literal['github', 'gitlab', 'bitbucket', 'bitbucket-dc'] | None = (
-        None
-    )
+    git_provider: Literal['github', 'gitlab', 'bitbucket', 'bitbucket-dc'] | None = None
 
 
 class AnalyticsEventResponse(BaseModel):

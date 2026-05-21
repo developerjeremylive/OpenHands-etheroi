@@ -392,9 +392,7 @@ class TestCompleteOnboardingEndpoint:
         assert 'onboarding_completed_at' in gi_kwargs['properties']
 
     @pytest.mark.asyncio
-    async def test_skips_group_identify_when_no_org_id(
-        self, mock_request, mock_user
-    ):
+    async def test_skips_group_identify_when_no_org_id(self, mock_request, mock_user):
         """group_identify must not fire when the user has no current org."""
         user_id = str(uuid.uuid4())
         mock_user_auth = MagicMock(spec=SaasUserAuth)
@@ -475,9 +473,7 @@ class TestCompleteOnboardingEndpoint:
         assert result.status_code == status.HTTP_200_OK
 
     @pytest.mark.asyncio
-    async def test_no_body_defaults_to_empty_selections(
-        self, mock_request, mock_user
-    ):
+    async def test_no_body_defaults_to_empty_selections(self, mock_request, mock_user):
         """When called with no body (backwards compat), analytics still
         fires with an empty selections dict."""
         user_id = str(uuid.uuid4())
