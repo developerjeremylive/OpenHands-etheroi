@@ -167,6 +167,31 @@ export function ConfigureModal({
   const existingWorkspace = integrationData?.workspace;
   const isWorkspaceEditable = existingWorkspace?.editable ?? false;
 
+  // Validation states
+  const [workspaceError, setWorkspaceError] = useState<string | null>(null);
+  const [webhookSecretError, setWebhookSecretError] = useState<string | null>(
+    null,
+  );
+  const [emailError, setEmailError] = useState<string | null>(null);
+  const [apiKeyError, setApiKeyError] = useState<string | null>(null);
+
+  const resetTransientFields = React.useCallback(() => {
+    setWorkspace("");
+    setWebhookSecret("");
+    setServiceAccountEmail("");
+    setServiceAccountApiKey("");
+    setAdminApiKey("");
+    setManualMode(false);
+    setManualSecret("");
+    setShowRemoveConfirm(false);
+    setIsActive(false);
+    setShowConfigurationFields(false);
+    setWorkspaceError(null);
+    setWebhookSecretError(null);
+    setEmailError(null);
+    setApiKeyError(null);
+  }, []);
+
   // Set initial workspace value when modal opens
   React.useEffect(() => {
     if (isOpen && existingWorkspace) {
@@ -177,6 +202,15 @@ export function ConfigureModal({
       setShowConfigurationFields(false);
     }
   }, [isOpen, existingWorkspace, isWorkspaceEditable]);
+
+  // Successful configure/remove actions close the modal from the parent. Clear
+  // transient secrets here too so one-time admin PATs cannot linger in local UI
+  // state while the Settings page remains mounted.
+  React.useEffect(() => {
+    if (!isOpen) {
+      resetTransientFields();
+    }
+  }, [isOpen, resetTransientFields]);
 
   // Helper function to get platform-specific placeholder
   const getWorkspacePlaceholder = () => {
@@ -201,14 +235,6 @@ export function ConfigureModal({
     }
     return I18nKey.PROJECT_MANAGEMENT$SERVICE_ACCOUNT_API_LABEL;
   };
-
-  // Validation states
-  const [workspaceError, setWorkspaceError] = useState<string | null>(null);
-  const [webhookSecretError, setWebhookSecretError] = useState<string | null>(
-    null,
-  );
-  const [emailError, setEmailError] = useState<string | null>(null);
-  const [apiKeyError, setApiKeyError] = useState<string | null>(null);
 
   const validateMutation = useValidateIntegration(platform, {
     onSuccess: (data) => {
@@ -322,20 +348,7 @@ export function ConfigureModal({
   };
 
   const handleClose = () => {
-    setWorkspace("");
-    setWebhookSecret("");
-    setServiceAccountEmail("");
-    setServiceAccountApiKey("");
-    setAdminApiKey("");
-    setManualMode(false);
-    setManualSecret("");
-    setShowRemoveConfirm(false);
-    setIsActive(false);
-    setShowConfigurationFields(false);
-    setWorkspaceError(null);
-    setWebhookSecretError(null);
-    setEmailError(null);
-    setApiKeyError(null);
+    resetTransientFields();
     onClose();
   };
 
