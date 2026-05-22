@@ -1,7 +1,9 @@
 from enum import Enum
 from typing import Any
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+
+from openhands.app_server.integrations.service_types import Comment
 
 
 class SourceType(str, Enum):
@@ -42,3 +44,4 @@ class JobContext(BaseModel):
     issue_title: str = ''
     issue_description: str = ''
     comment_id: str = ''
+    previous_comments: list[Comment] = Field(default_factory=list)
