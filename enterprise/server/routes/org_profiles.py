@@ -170,7 +170,10 @@ async def list_profiles(
     org = await _get_org(org_id, user_id)
     profiles = _load_profiles(org)
     return ProfileListResponse(
-        profiles=[ProfileInfo(**p) for p in profiles.summaries()],
+        profiles=[
+            ProfileInfo(**p)
+            for p in profiles.summaries(managed_proxy_url=LITE_LLM_API_URL)
+        ],
         active_profile=profiles.active,
     )
 
