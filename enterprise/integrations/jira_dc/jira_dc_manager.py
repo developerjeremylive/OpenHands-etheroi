@@ -49,6 +49,10 @@ from openhands.app_server.utils.logger import openhands_logger as logger
 # 1f440 (👀 eyes) is NOT in Jira DC's reaction palette, so thumbs-up is used.
 JIRA_DC_REACTION_EMOJI_ID = '1f44d'
 
+# Events the OpenHands webhook subscribes to, used when auto-enrolling the
+# webhook in Jira. Mirrors what parse_webhook handles.
+JIRA_DC_WEBHOOK_EVENTS = ['comment_created', 'jira:issue_updated']
+
 
 class JiraDcManager(Manager[JiraDcViewInterface]):
     def __init__(self, token_manager: TokenManager):
@@ -62,7 +66,6 @@ class JiraDcManager(Manager[JiraDcViewInterface]):
         self, user_email: str, jira_dc_user_id: str, workspace_id: int
     ) -> tuple[JiraDcUser | None, UserAuth | None]:
         """Authenticate Jira DC user and get their OpenHands user auth."""
-
         # In email-match mode (OAuth disabled) the workspace link is stored with
         # an 'unavailable' Jira account id, so the webhook's real Jira user key
         # can never match a stored row. Resolve the user by matching their Jira
@@ -244,7 +247,6 @@ class JiraDcManager(Manager[JiraDcViewInterface]):
 
     async def receive_message(self, message: Message):
         """Process incoming Jira DC webhook message."""
-
         payload = message.message.get('payload', {})
         job_context = self.parse_webhook(payload)
 
@@ -344,10 +346,7 @@ class JiraDcManager(Manager[JiraDcViewInterface]):
     async def is_job_requested(
         self, message: Message, jira_dc_view: JiraDcViewInterface
     ) -> bool:
-        """
-        Check if a job is requested and handle repository selection.
-        """
-
+        """Check if a job is requested and handle repository selection."""
         if isinstance(jira_dc_view, JiraDcExistingConversationView):
             return True
 
@@ -547,6 +546,116 @@ class JiraDcManager(Manager[JiraDcViewInterface]):
             logger.warning(
                 f'[Jira DC] Failed to add acknowledgement reaction (non-fatal): {str(e)}'
             )
+
+    async def register_webhook(
+        self,
+        base_api_url: str,
+        admin_api_key: str,
+        events_url: str,
+        secret: str,
+        name: str = 'OpenHands',
+    ) -> int:
+        """Create or update the OpenHands webhook in Jira DC via the admin API.
+
+        Uses Jira Data Center's ``jira-webhook`` plugin REST API (the same one the
+        admin UI calls). Idempotent: if a webhook already targets ``events_url`` it
+        is updated in place (preserving its id); otherwise a new one is created.
+
+        Args:
+            base_api_url: Jira base URL, e.g. ``https://jira.example.com``.
+            admin_api_key: A Jira admin PAT. Used only for this call; never stored.
+            events_url: The OpenHands endpoint Jira should POST events to.
+            secret: HMAC signing secret Jira will sign deliveries with. Must match
+                the workspace's stored ``webhook_secret`` or verification rejects.
+            name: Display name for the webhook.
+
+        Returns:
+            The id of the created or updated webhook.
+        """
+        base = base_api_url.rstrip('/')
+        collection_url = f'{base}/rest/jira-webhook/1.0/webhooks'
+        headers = {'Authorization': f'Bearer {admin_api_key}'}
+        payload = {
+            'name': name,
+            'url': events_url,
+            'events': JIRA_DC_WEBHOOK_EVENTS,
+            'active': True,
+            'scopeType': 'global',
+            'configuration': {'SECRET': secret, 'EXCLUDE_BODY': 'false'},
+        }
+
+        async with httpx.AsyncClient(verify=httpx_verify_option()) as client:
+            # Idempotency: reuse any existing webhook already pointing at our URL.
+            listing = await client.get(collection_url, headers=headers)
+            listing.raise_for_status()
+            existing = next(
+                (w for w in listing.json() if w.get('url') == events_url), None
+            )
+
+            if existing:
+                webhook_id = existing['id']
+                response = await client.put(
+                    f'{collection_url}/{webhook_id}',
+                    headers=headers,
+                    json={**payload, 'id': webhook_id},
+                )
+                response.raise_for_status()
+                logger.info(f'[Jira DC] Updated webhook {webhook_id} -> {events_url}')
+                return webhook_id
+
+            response = await client.post(
+                collection_url, headers=headers, json={**payload, 'id': None}
+            )
+            response.raise_for_status()
+            webhook_id = response.json().get('id')
+            logger.info(f'[Jira DC] Created webhook {webhook_id} -> {events_url}')
+            return webhook_id
+
+    async def delete_webhook(
+        self,
+        base_api_url: str,
+        admin_api_key: str,
+        events_url: str,
+    ) -> bool:
+        """Delete the OpenHands webhook from Jira DC, if present.
+
+        Counterpart to :meth:`register_webhook`. Looks up the webhook that
+        targets ``events_url`` and deletes it via the same ``jira-webhook``
+        plugin REST API. Idempotent: returns ``False`` (not an error) when no
+        matching webhook exists.
+
+        Args:
+            base_api_url: Jira base URL, e.g. ``https://jira.example.com``.
+            admin_api_key: A Jira admin PAT. Used only for this call; never
+                stored.
+            events_url: The OpenHands endpoint whose webhook should be removed.
+
+        Returns:
+            True if a webhook was deleted; False if there was nothing to delete.
+        """
+        base = base_api_url.rstrip('/')
+        collection_url = f'{base}/rest/jira-webhook/1.0/webhooks'
+        headers = {'Authorization': f'Bearer {admin_api_key}'}
+
+        async with httpx.AsyncClient(verify=httpx_verify_option()) as client:
+            listing = await client.get(collection_url, headers=headers)
+            listing.raise_for_status()
+            existing = next(
+                (w for w in listing.json() if w.get('url') == events_url), None
+            )
+            if not existing:
+                logger.info(
+                    f'[Jira DC] No webhook found for {events_url}; nothing to delete'
+                )
+                return False
+
+            webhook_id = existing['id']
+            response = await client.delete(
+                f'{collection_url}/{webhook_id}', headers=headers
+            )
+            response.raise_for_status()
+            logger.info(f'[Jira DC] Deleted webhook {webhook_id} -> {events_url}')
+            return True
 
     async def _send_error_comment(
         self,

@@ -1,6 +1,4 @@
-"""
-Unit tests for JiraDcManager.
-"""
+"""Unit tests for JiraDcManager."""
 
 import hashlib
 import hmac
@@ -111,18 +109,17 @@ class TestAuthenticateUser:
         workspace link carries the 'unavailable' sentinel rather than the
         real key, so a key lookup would never match (the original bug).
         """
-        mock_token_manager.get_user_id_from_user_email.return_value = (
-            'test_keycloak_id'
-        )
+        mock_token_manager.get_user_id_from_user_email.return_value = 'test_keycloak_id'
         jira_dc_manager.integration_store.get_active_user_by_keycloak_id_and_workspace = AsyncMock(
             return_value=sample_jira_dc_user
         )
 
-        with patch(
-            'integrations.jira_dc.jira_dc_manager.JIRA_DC_ENABLE_OAUTH', False
-        ), patch(
-            'integrations.jira_dc.jira_dc_manager.get_user_auth_from_keycloak_id',
-            return_value=sample_user_auth,
+        with (
+            patch('integrations.jira_dc.jira_dc_manager.JIRA_DC_ENABLE_OAUTH', False),
+            patch(
+                'integrations.jira_dc.jira_dc_manager.get_user_auth_from_keycloak_id',
+                return_value=sample_user_auth,
+            ),
         ):
             jira_dc_user, user_auth = await jira_dc_manager.authenticate_user(
                 'user@company.com', 'real_jira_key_from_webhook', 1
@@ -1037,9 +1034,10 @@ class TestGetIssueDetails:
             response=mock_response,
         )
 
-        with patch('httpx.AsyncClient') as mock_client, patch(
-            'integrations.jira_dc.jira_dc_manager.logger'
-        ) as mock_logger:
+        with (
+            patch('httpx.AsyncClient') as mock_client,
+            patch('integrations.jira_dc.jira_dc_manager.logger') as mock_logger,
+        ):
             mock_client.return_value.__aenter__.return_value.get = AsyncMock(
                 return_value=mock_response
             )
@@ -1083,6 +1081,138 @@ class TestSendMessage:
 
             assert result == {'id': 'comment_id'}
             mock_response.raise_for_status.assert_called_once()
+
+
+class TestWebhookRegistration:
+    """Test Jira DC global webhook install and removal."""
+
+    @pytest.mark.asyncio
+    async def test_register_webhook_updates_existing_url(self, jira_dc_manager):
+        """register_webhook updates the existing OpenHands webhook in place."""
+        listing_response = MagicMock()
+        listing_response.json.return_value = [
+            {'id': 3, 'name': 'OpenHands', 'url': 'https://oh.example/events'}
+        ]
+        listing_response.raise_for_status = MagicMock()
+
+        update_response = MagicMock()
+        update_response.raise_for_status = MagicMock()
+
+        with patch('httpx.AsyncClient') as mock_client:
+            client = mock_client.return_value.__aenter__.return_value
+            client.get = AsyncMock(return_value=listing_response)
+            client.put = AsyncMock(return_value=update_response)
+
+            webhook_id = await jira_dc_manager.register_webhook(
+                base_api_url='https://jira.company.com/',
+                admin_api_key='admin-pat',
+                events_url='https://oh.example/events',
+                secret='webhook-secret',
+            )
+
+        assert webhook_id == 3
+        client.get.assert_called_once_with(
+            'https://jira.company.com/rest/jira-webhook/1.0/webhooks',
+            headers={'Authorization': 'Bearer admin-pat'},
+        )
+        client.put.assert_called_once()
+        assert (
+            client.put.call_args.args[0]
+            == 'https://jira.company.com/rest/jira-webhook/1.0/webhooks/3'
+        )
+        assert client.put.call_args.kwargs['json']['id'] == 3
+        assert client.put.call_args.kwargs['json']['configuration'] == {
+            'SECRET': 'webhook-secret',
+            'EXCLUDE_BODY': 'false',
+        }
+        assert client.put.call_args.kwargs['json']['events'] == [
+            'comment_created',
+            'jira:issue_updated',
+        ]
+        update_response.raise_for_status.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_register_webhook_creates_when_absent(self, jira_dc_manager):
+        """register_webhook creates a new webhook when no URL match exists."""
+        listing_response = MagicMock()
+        listing_response.json.return_value = []
+        listing_response.raise_for_status = MagicMock()
+
+        create_response = MagicMock()
+        create_response.json.return_value = {'id': 7}
+        create_response.raise_for_status = MagicMock()
+
+        with patch('httpx.AsyncClient') as mock_client:
+            client = mock_client.return_value.__aenter__.return_value
+            client.get = AsyncMock(return_value=listing_response)
+            client.post = AsyncMock(return_value=create_response)
+
+            webhook_id = await jira_dc_manager.register_webhook(
+                base_api_url='https://jira.company.com',
+                admin_api_key='admin-pat',
+                events_url='https://oh.example/events',
+                secret='webhook-secret',
+            )
+
+        assert webhook_id == 7
+        client.post.assert_called_once()
+        assert (
+            client.post.call_args.args[0]
+            == 'https://jira.company.com/rest/jira-webhook/1.0/webhooks'
+        )
+        assert client.post.call_args.kwargs['json']['id'] is None
+        create_response.raise_for_status.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_delete_webhook_removes_existing_url(self, jira_dc_manager):
+        """delete_webhook deletes the webhook that targets the OpenHands URL."""
+        listing_response = MagicMock()
+        listing_response.json.return_value = [
+            {'id': 3, 'name': 'OpenHands', 'url': 'https://oh.example/events'}
+        ]
+        listing_response.raise_for_status = MagicMock()
+
+        delete_response = MagicMock()
+        delete_response.raise_for_status = MagicMock()
+
+        with patch('httpx.AsyncClient') as mock_client:
+            client = mock_client.return_value.__aenter__.return_value
+            client.get = AsyncMock(return_value=listing_response)
+            client.delete = AsyncMock(return_value=delete_response)
+
+            deleted = await jira_dc_manager.delete_webhook(
+                base_api_url='https://jira.company.com',
+                admin_api_key='admin-pat',
+                events_url='https://oh.example/events',
+            )
+
+        assert deleted is True
+        client.delete.assert_called_once_with(
+            'https://jira.company.com/rest/jira-webhook/1.0/webhooks/3',
+            headers={'Authorization': 'Bearer admin-pat'},
+        )
+        delete_response.raise_for_status.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_delete_webhook_returns_false_when_absent(self, jira_dc_manager):
+        """delete_webhook is idempotent when no webhook targets the URL."""
+        listing_response = MagicMock()
+        listing_response.json.return_value = []
+        listing_response.raise_for_status = MagicMock()
+
+        with patch('httpx.AsyncClient') as mock_client:
+            client = mock_client.return_value.__aenter__.return_value
+            client.get = AsyncMock(return_value=listing_response)
+            client.delete = AsyncMock()
+
+            deleted = await jira_dc_manager.delete_webhook(
+                base_api_url='https://jira.company.com',
+                admin_api_key='admin-pat',
+                events_url='https://oh.example/events',
+            )
+
+        assert deleted is False
+        client.delete.assert_not_called()
 
 
 class TestSendErrorComment:
