@@ -73,26 +73,36 @@ describe("<ModelMessages />", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("starts collapsed and reveals profile rows then row details on expansion", async () => {
-    useModelStore
-      .getState()
-      .show(CONV, null, [profile("default"), profile("scratch")]);
+  it("starts collapsed and reveals rows with model and base_url (no api_key) on expansion", async () => {
+    useModelStore.getState().show(CONV, null, [
+      profile("default", {
+        model: "anthropic/claude-sonnet-4-6",
+        base_url: null,
+      }),
+      profile("scratch", {
+        model: "openai/gpt-5",
+        base_url: "https://api.example.com",
+      }),
+    ]);
     const user = userEvent.setup();
     render(<ModelMessages conversationId={CONV} anchorEventId={null} />);
 
     expect(screen.getByText("MODEL$AVAILABLE_PROFILES")).toBeInTheDocument();
     // Outer toggle is collapsed: profile rows are not in the document yet.
-    expect(
-      screen.queryByRole("button", { name: /default/i }),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByText("default")).toBeNull();
 
     await user.click(screen.getByRole("button", { name: /expand/i }));
 
-    // Profile rows are now visible, but per-row details remain collapsed.
-    expect(screen.queryByText(/api_key:/i)).toBeNull();
+    // Each row shows its name with model and base_url directly beneath it.
+    expect(screen.getByText("default")).toBeInTheDocument();
+    expect(screen.getByText("scratch")).toBeInTheDocument();
+    expect(screen.getByText(/model:\s+openai\/gpt-5/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/base_url:\s+https:\/\/api\.example\.com/),
+    ).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: /default/i }));
-    expect(screen.getByText(/api_key:\s+set/i)).toBeInTheDocument();
+    // The api_key is never shown in the /model list.
+    expect(screen.queryByText(/api_key/i)).toBeNull();
   });
 
   it("only renders entries whose anchor matches the prop", () => {
