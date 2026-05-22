@@ -563,6 +563,60 @@ async def test_create_jira_dc_workspace_oauth_disabled_existing_workspace(
         mock_handle_link.assert_called_once()
 
 
+@pytest.mark.asyncio
+@patch('server.routes.integration.jira_dc.get_user_auth')
+@patch('server.routes.integration.jira_dc.jira_dc_manager', new_callable=AsyncMock)
+@patch('server.routes.integration.jira_dc.JIRA_DC_ENABLE_OAUTH', False)
+@patch(
+    'server.routes.integration.jira_dc._validate_workspace_update_permissions',
+    new_callable=AsyncMock,
+)
+@patch(
+    'server.routes.integration.jira_dc._handle_workspace_link_creation',
+    new_callable=AsyncMock,
+)
+async def test_create_jira_dc_workspace_preserves_secret_when_omitted_on_update(
+    mock_handle_link,
+    mock_validate,
+    mock_manager,
+    mock_get_auth,
+    mock_request,
+    mock_user_auth,
+):
+    mock_get_auth.return_value = mock_user_auth
+    mock_workspace = MagicMock(
+        id=1, name='test-workspace', webhook_secret='encrypted_old_secret'
+    )
+    mock_manager.integration_store.get_workspace_by_name.return_value = mock_workspace
+    mock_validate.return_value = mock_workspace
+
+    workspace_data = JiraDcWorkspaceCreate(
+        workspace_name='test-workspace',
+        svc_acc_email='svc@test.com',
+        svc_acc_api_key='key',
+        is_active=True,
+    )
+
+    with patch('server.routes.integration.jira_dc.token_manager') as mock_token_manager:
+        mock_token_manager.decrypt_text.return_value = 'old-secret'
+        mock_token_manager.encrypt_text.side_effect = lambda x: f'enc_{x}'
+
+        response = await create_jira_dc_workspace(mock_request, workspace_data)
+        content = json.loads(response.body)
+
+        assert response.status_code == 200
+        assert content['success'] is True
+        mock_token_manager.decrypt_text.assert_called_once_with('encrypted_old_secret')
+        mock_manager.integration_store.update_workspace.assert_called_once()
+        assert (
+            mock_manager.integration_store.update_workspace.call_args.kwargs[
+                'encrypted_webhook_secret'
+            ]
+            == 'enc_old-secret'
+        )
+        mock_handle_link.assert_called_once()
+
+
 # Test create_workspace_link with OAuth disabled
 @pytest.mark.asyncio
 @patch('server.routes.integration.jira_dc.get_user_auth')
