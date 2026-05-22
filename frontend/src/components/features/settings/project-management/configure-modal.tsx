@@ -44,7 +44,7 @@ export function ConfigureButton({
 // Generate a URL-safe random secret in the browser for the manual-setup flow,
 // so the admin sees the exact value to paste into Jira's webhook config. In
 // auto-enroll mode we send an empty secret and the server generates its own.
-function generateWebhookSecret(): string {
+export function generateWebhookSecret(): string {
   const bytes = new Uint8Array(24);
   crypto.getRandomValues(bytes);
   let binary = "";
@@ -65,7 +65,7 @@ interface CopyableValueProps {
 
 // Read-only, selectable value with a copy button - used to surface the webhook
 // URL and secret the admin must paste into Jira during manual setup.
-function CopyableValue({ label, value, testId }: CopyableValueProps) {
+export function CopyableValue({ label, value, testId }: CopyableValueProps) {
   const { t } = useTranslation();
   const [copied, setCopied] = useState(false);
 
