@@ -464,14 +464,16 @@ async def create_jira_dc_workspace(
                 encrypted_webhook_secret = token_manager.encrypt_text(
                     resolved_webhook_secret
                 )
-                encrypted_svc_acc_api_key = token_manager.encrypt_text(provided_api_key)
+                encrypted_new_svc_acc_api_key = token_manager.encrypt_text(
+                    provided_api_key
+                )
 
                 workspace = await jira_dc_manager.integration_store.create_workspace(
                     name=workspace_data.workspace_name,
                     admin_user_id=user_id,
                     encrypted_webhook_secret=encrypted_webhook_secret,
                     svc_acc_email=workspace_data.svc_acc_email,
-                    encrypted_svc_acc_api_key=encrypted_svc_acc_api_key,
+                    encrypted_svc_acc_api_key=encrypted_new_svc_acc_api_key,
                     status='active' if workspace_data.is_active else 'inactive',
                 )
 
@@ -674,7 +676,7 @@ async def jira_dc_callback(request: Request, code: str, state: str):
             encrypted_webhook_secret = token_manager.encrypt_text(
                 integration_session['webhook_secret']
             )
-            encrypted_svc_acc_api_key = token_manager.encrypt_text(
+            encrypted_new_svc_acc_api_key = token_manager.encrypt_text(
                 integration_session['svc_acc_api_key']
             )
 
@@ -683,7 +685,7 @@ async def jira_dc_callback(request: Request, code: str, state: str):
                 admin_user_id=integration_session['keycloak_user_id'],
                 encrypted_webhook_secret=encrypted_webhook_secret,
                 svc_acc_email=integration_session['svc_acc_email'],
-                encrypted_svc_acc_api_key=encrypted_svc_acc_api_key,
+                encrypted_svc_acc_api_key=encrypted_new_svc_acc_api_key,
                 status='active' if integration_session['is_active'] else 'inactive',
             )
 
