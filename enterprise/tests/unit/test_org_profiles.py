@@ -16,6 +16,7 @@ from openhands.app_server.settings.llm_profiles import (
     LLMProfiles,
     StrictLLM,
 )
+from openhands.app_server.utils.llm import MASKED_API_KEY
 
 # Mock the database module before importing the router — matches the
 # test_saas_settings_store.py pattern so module-level imports don't try to
@@ -467,3 +468,37 @@ class TestActivateTransactionAtomicity:
         org_after = await _read_org(async_session_maker, org_id)
         # No commit happened → org.active stays None.
         assert _load_profiles(org_after).active is None
+
+    @pytest.mark.asyncio
+    async def test_activate_masks_key_in_diff_and_persists_real_key_encrypted(
+        self, async_session_maker, patch_route_db
+    ):
+        """A per-profile key must never be stored raw in the plain-JSON
+        ``agent_settings_diff`` column, and it must actually take effect: the
+        effective key resolves from the encrypted ``_llm_api_key`` column (via
+        ``has_custom_llm_api_key``), not from the diff.
+        """
+        org_id = patch_route_db
+        await save_profile(
+            org_id=org_id,
+            name='byor',
+            request=SaveProfileRequest(
+                llm=StrictLLM(
+                    model='anthropic/claude-3-5-sonnet',
+                    base_url='https://api.anthropic.com/v1',
+                    api_key='byor-secret',
+                )
+            ),
+            user_id=str(ADMIN_USER_ID),
+        )
+
+        await activate_profile(org_id=org_id, name='byor', user_id=str(ADMIN_USER_ID))
+
+        member = await _read_member(async_session_maker, org_id, ADMIN_USER_ID)
+        assert member is not None
+        # The raw key never lands in the unencrypted diff column.
+        assert member.agent_settings_diff['llm']['api_key'] == MASKED_API_KEY
+        assert 'byor-secret' not in str(member.agent_settings_diff)
+        # A non-managed (BYOR) key takes effect via the encrypted member store.
+        assert member.has_custom_llm_api_key is True
+        assert member.llm_api_key.get_secret_value() == 'byor-secret'

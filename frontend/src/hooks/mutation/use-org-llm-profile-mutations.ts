@@ -66,9 +66,12 @@ export function useActivateOrgLlmProfile(orgId: string | null | undefined) {
     },
     onSuccess: () => {
       invalidateProfileCaches(queryClient, orgId);
-      // Also invalidate settings since the active LLM config changed
+      // Activation writes the member's agent_settings_diff, whose effective
+      // settings surface under the *personal* scope (not just "org"). Invalidate
+      // all settings scopes — matching the personal useActivateLlmProfile hook —
+      // so every settings surface refetches the new active LLM config.
       queryClient.invalidateQueries({
-        queryKey: SETTINGS_QUERY_KEYS.byScope("org", orgId),
+        queryKey: SETTINGS_QUERY_KEYS.all,
       });
     },
   });

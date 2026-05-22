@@ -16,6 +16,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Path, status
 from pydantic import BaseModel, Field, ValidationError
+from server.constants import LITE_LLM_API_URL
 from server.routes.org_models import (
     OrgNotFoundError,
     _validate_persisted_agent_settings,
@@ -34,6 +35,7 @@ from openhands.app_server.settings.llm_profiles import (
     ProfileNotFoundError,
     StrictLLM,
 )
+from openhands.app_server.utils.llm import MASKED_API_KEY, is_openhands_model
 from openhands.app_server.utils.logger import openhands_logger as logger
 
 from ..auth.authorization import Permission, require_permission
@@ -294,10 +296,39 @@ async def activate_profile(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail='Organization membership not found',
             )
+        # Apply the profile to the calling member. The profile's raw api_key
+        # must never land in ``agent_settings_diff`` (a plain, unencrypted JSON
+        # column): mask it there and lift the real value into the encrypted
+        # ``_llm_api_key`` column, mirroring the main settings path
+        # (OrgUpdate._lift_and_mask_llm_api_key / SaasSettingsStore.store). The
+        # effective api_key is resolved from ``_llm_api_key`` /
+        # ``has_custom_llm_api_key`` at load time, not from the diff — so a
+        # profile's key only takes effect if written there.
+        llm_dump = llm.model_dump(mode='json', context={'expose_secrets': True})
+        profile_api_key = llm_dump.get('api_key')
+        if profile_api_key and profile_api_key != MASKED_API_KEY:
+            llm_dump['api_key'] = MASKED_API_KEY
+            # Classify managed vs. BYOR exactly as SaasSettingsStore.store() so
+            # billing attribution stays correct.
+            base_url = llm_dump.get('base_url')
+            normalized_base_url = base_url.rstrip('/') if base_url else None
+            normalized_managed_base_url = LITE_LLM_API_URL.rstrip('/')
+            uses_managed_llm_key = (
+                normalized_base_url == normalized_managed_base_url
+                or (
+                    normalized_base_url is None
+                    and is_openhands_model(llm_dump.get('model'))
+                )
+            )
+            member.llm_api_key = profile_api_key
+            member.has_custom_llm_api_key = not uses_managed_llm_key
+        else:
+            # No per-profile key: fall back to the org/managed default rather
+            # than leaving a stale custom key from a previous activation in play.
+            member.has_custom_llm_api_key = False
+
         member_diff = dict(member.agent_settings_diff or {})
-        member_diff['llm'] = llm.model_dump(
-            mode='json', context={'expose_secrets': True}
-        )
+        member_diff['llm'] = llm_dump
         member.agent_settings_diff = member_diff
 
     return ActivateProfileResponse(
