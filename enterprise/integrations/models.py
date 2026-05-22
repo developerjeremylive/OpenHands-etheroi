@@ -41,3 +41,4 @@ class JobContext(BaseModel):
     base_api_url: str = ''
     issue_title: str = ''
     issue_description: str = ''
+    comment_id: str = ''

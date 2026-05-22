@@ -19,7 +19,9 @@ from integrations.utils import (
     HOST_URL,
     OPENHANDS_RESOLVER_TEMPLATES_DIR,
     filter_potential_repos_by_user_msg,
+    get_account_not_linked_message,
     get_session_expired_message,
+    get_user_not_found_message,
     markdown_to_jira_markup,
 )
 from jinja2 import Environment, FileSystemLoader
@@ -41,6 +43,11 @@ from openhands.app_server.types import (
 from openhands.app_server.user_auth.user_auth import UserAuth
 from openhands.app_server.utils.http_session import httpx_verify_option
 from openhands.app_server.utils.logger import openhands_logger as logger
+
+# Unicode codepoint of the emoji reaction posted to acknowledge an @openhands
+# mention via Jira's internal reactions API. 1f44d = 👍 (thumbs up). Note:
+# 1f440 (👀 eyes) is NOT in Jira DC's reaction palette, so thumbs-up is used.
+JIRA_DC_REACTION_EMOJI_ID = '1f44d'
 
 
 class JiraDcManager(Manager[JiraDcViewInterface]):
@@ -164,6 +171,7 @@ class JiraDcManager(Manager[JiraDcViewInterface]):
         if event_type == 'comment_created':
             comment_data = payload.get('comment', {})
             comment = comment_data.get('body', '')
+            comment_id = comment_data.get('id')
 
             if '@openhands' not in comment:
                 return None
@@ -199,6 +207,7 @@ class JiraDcManager(Manager[JiraDcViewInterface]):
             display_name = user_data.get('displayName')
             user_key = user_data.get('key')
             comment = ''
+            comment_id = None
         else:
             return None
 
@@ -230,6 +239,7 @@ class JiraDcManager(Manager[JiraDcViewInterface]):
             platform_user_id=user_key,
             workspace_name=workspace_name,
             base_api_url=base_api_url,
+            comment_id=comment_id or '',
         )
 
     async def receive_message(self, message: Message):
@@ -277,11 +287,16 @@ class JiraDcManager(Manager[JiraDcViewInterface]):
             logger.warning(
                 f'[Jira DC] User authentication failed for {job_context.user_email}'
             )
-            await self._send_error_comment(
-                job_context,
-                f'User {job_context.user_email} is not authenticated or active in the Jira DC integration.',
-                workspace,
+            # Distinguish "no OpenHands account" from "account exists but not linked
+            # to this workspace" so the reply is actionable (mirrors GitHub/BBDC).
+            keycloak_user_id = await self.token_manager.get_user_id_from_user_email(
+                job_context.user_email
             )
+            if keycloak_user_id:
+                error_msg = get_account_not_linked_message(job_context.display_name)
+            else:
+                error_msg = get_user_not_found_message(job_context.display_name)
+            await self._send_error_comment(job_context, error_msg, workspace)
             return
 
         # Get issue details
@@ -323,6 +338,7 @@ class JiraDcManager(Manager[JiraDcViewInterface]):
         if not await self.is_job_requested(message, jira_dc_view):
             return
 
+        await self._add_acknowledgement_reaction(job_context, workspace)
         await self.start_job(jira_dc_view)
 
     async def is_job_requested(
@@ -482,6 +498,55 @@ class JiraDcManager(Manager[JiraDcViewInterface]):
             response = await client.post(url, headers=headers, json=data)
             response.raise_for_status()
             return response.json()
+
+    async def add_reaction(
+        self,
+        comment_id: str,
+        base_api_url: str,
+        svc_acc_api_key: str,
+        emoji_id: str = JIRA_DC_REACTION_EMOJI_ID,
+    ):
+        """Add an emoji reaction to a Jira DC comment as the service account.
+
+        Uses Jira Data Center's internal reactions API (the endpoint the web UI
+        calls). emoji_id is a Unicode codepoint string, e.g. '1f44d' for 👍.
+
+        Args:
+            comment_id: The id of the comment to react to.
+            base_api_url: The base API URL for the Jira DC instance.
+            svc_acc_api_key: Service account PAT used to authenticate.
+            emoji_id: Unicode codepoint of the reaction emoji.
+        """
+        url = f'{base_api_url}/rest/internal/2/reactions'
+        headers = {'Authorization': f'Bearer {svc_acc_api_key}'}
+        data = {'commentId': comment_id, 'emojiId': emoji_id}
+        async with httpx.AsyncClient(verify=httpx_verify_option()) as client:
+            response = await client.post(url, headers=headers, json=data)
+            response.raise_for_status()
+
+    async def _add_acknowledgement_reaction(
+        self, job_context: JobContext, workspace: JiraDcWorkspace
+    ):
+        """Acknowledge the @openhands mention with a best-effort reaction.
+
+        Reactions are non-essential, so failures are logged, never raised.
+        """
+        if not job_context.comment_id:
+            return
+        try:
+            api_key = self.token_manager.decrypt_text(workspace.svc_acc_api_key)
+            await self.add_reaction(
+                comment_id=job_context.comment_id,
+                base_api_url=job_context.base_api_url,
+                svc_acc_api_key=api_key,
+            )
+            logger.info(
+                f'[Jira DC] Reacted to comment {job_context.comment_id} on issue {job_context.issue_key}'
+            )
+        except Exception as e:
+            logger.warning(
+                f'[Jira DC] Failed to add acknowledgement reaction (non-fatal): {str(e)}'
+            )
 
     async def _send_error_comment(
         self,

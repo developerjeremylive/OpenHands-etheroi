@@ -542,6 +542,58 @@ class TestReceiveMessage:
         jira_dc_manager._send_error_comment.assert_called_once()
 
     @pytest.mark.asyncio
+    async def test_receive_message_no_account_sends_signup_message(
+        self,
+        jira_dc_manager,
+        mock_token_manager,
+        sample_comment_webhook_payload,
+        sample_jira_dc_workspace,
+    ):
+        """No OpenHands account → reply asks the user to sign up."""
+        jira_dc_manager.integration_store.get_workspace_by_name.return_value = (
+            sample_jira_dc_workspace
+        )
+        jira_dc_manager.authenticate_user = AsyncMock(return_value=(None, None))
+        jira_dc_manager._send_error_comment = AsyncMock()
+        mock_token_manager.get_user_id_from_user_email.return_value = None
+
+        message = Message(
+            source=SourceType.JIRA_DC,
+            message={'payload': sample_comment_webhook_payload},
+        )
+        await jira_dc_manager.receive_message(message)
+
+        jira_dc_manager._send_error_comment.assert_called_once()
+        sent_msg = jira_dc_manager._send_error_comment.call_args.args[1]
+        assert 'sign up' in sent_msg.lower()
+
+    @pytest.mark.asyncio
+    async def test_receive_message_account_not_linked_sends_link_message(
+        self,
+        jira_dc_manager,
+        mock_token_manager,
+        sample_comment_webhook_payload,
+        sample_jira_dc_workspace,
+    ):
+        """Has an account but not linked → reply asks the user to link it."""
+        jira_dc_manager.integration_store.get_workspace_by_name.return_value = (
+            sample_jira_dc_workspace
+        )
+        jira_dc_manager.authenticate_user = AsyncMock(return_value=(None, None))
+        jira_dc_manager._send_error_comment = AsyncMock()
+        mock_token_manager.get_user_id_from_user_email.return_value = 'kc-user-123'
+
+        message = Message(
+            source=SourceType.JIRA_DC,
+            message={'payload': sample_comment_webhook_payload},
+        )
+        await jira_dc_manager.receive_message(message)
+
+        jira_dc_manager._send_error_comment.assert_called_once()
+        sent_msg = jira_dc_manager._send_error_comment.call_args.args[1]
+        assert 'linked' in sent_msg.lower()
+
+    @pytest.mark.asyncio
     async def test_receive_message_get_issue_details_failed(
         self,
         jira_dc_manager,
@@ -1113,3 +1165,75 @@ class TestSendRepoSelectionComment:
 
         # Should not raise exception even if send_message fails
         await jira_dc_manager._send_repo_selection_comment(mock_view)
+
+
+class TestAddReaction:
+    """Test emoji reaction posting via the internal reactions API."""
+
+    @pytest.mark.asyncio
+    async def test_add_reaction_posts_to_reactions_endpoint(self, jira_dc_manager):
+        """add_reaction POSTs the comment id + emoji to the reactions endpoint."""
+        mock_response = MagicMock()
+        mock_response.raise_for_status = MagicMock()
+
+        with patch('httpx.AsyncClient') as mock_client:
+            mock_post = AsyncMock(return_value=mock_response)
+            mock_client.return_value.__aenter__.return_value.post = mock_post
+
+            await jira_dc_manager.add_reaction(
+                comment_id='10106',
+                base_api_url='https://jira.company.com',
+                svc_acc_api_key='bearer_token',
+            )
+
+            mock_post.assert_called_once()
+            call = mock_post.call_args
+            assert call.args[0] == 'https://jira.company.com/rest/internal/2/reactions'
+            assert call.kwargs['json'] == {'commentId': '10106', 'emojiId': '1f44d'}
+            assert call.kwargs['headers']['Authorization'] == 'Bearer bearer_token'
+            mock_response.raise_for_status.assert_called_once()
+
+
+class TestAddAcknowledgementReaction:
+    """Test the best-effort acknowledgement reaction on the triggering comment."""
+
+    @pytest.mark.asyncio
+    async def test_reacts_when_comment_id_present(
+        self, jira_dc_manager, sample_jira_dc_workspace, sample_job_context
+    ):
+        sample_job_context.comment_id = '10106'
+        jira_dc_manager.add_reaction = AsyncMock()
+        jira_dc_manager.token_manager.decrypt_text.return_value = 'decrypted_key'
+
+        await jira_dc_manager._add_acknowledgement_reaction(
+            sample_job_context, sample_jira_dc_workspace
+        )
+
+        jira_dc_manager.add_reaction.assert_called_once()
+        assert jira_dc_manager.add_reaction.call_args.kwargs['comment_id'] == '10106'
+
+    @pytest.mark.asyncio
+    async def test_skips_when_no_comment_id(
+        self, jira_dc_manager, sample_jira_dc_workspace, sample_job_context
+    ):
+        sample_job_context.comment_id = ''
+        jira_dc_manager.add_reaction = AsyncMock()
+
+        await jira_dc_manager._add_acknowledgement_reaction(
+            sample_job_context, sample_jira_dc_workspace
+        )
+
+        jira_dc_manager.add_reaction.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_does_not_raise_on_failure(
+        self, jira_dc_manager, sample_jira_dc_workspace, sample_job_context
+    ):
+        sample_job_context.comment_id = '10106'
+        jira_dc_manager.add_reaction = AsyncMock(side_effect=Exception('boom'))
+        jira_dc_manager.token_manager.decrypt_text.return_value = 'decrypted_key'
+
+        # Reactions are non-essential; a failure must never propagate.
+        await jira_dc_manager._add_acknowledgement_reaction(
+            sample_job_context, sample_jira_dc_workspace
+        )

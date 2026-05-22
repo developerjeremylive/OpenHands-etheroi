@@ -63,6 +63,26 @@ def get_user_not_found_message(username: str | None = None) -> str:
     return f"It looks like you haven't created an OpenHands account yet. Please sign up at [OpenHands Cloud]({HOST_URL}) and try again."
 
 
+def get_account_not_linked_message(username: str | None = None) -> str:
+    """Get a message when a user has an OpenHands account but hasn't linked it.
+
+    Used by workspace-linking integrations (e.g. Jira Data Center) when the user
+    has a Keycloak account but hasn't linked their platform identity to the
+    workspace yet, so the resolver can't act on their behalf. This is distinct
+    from get_user_not_found_message, which is for users with no account at all.
+
+    Args:
+        username: Optional username to mention in the message. If provided, the
+                  message is prefixed with @username; otherwise it is generic.
+
+    Returns:
+        A formatted account-not-linked message.
+    """
+    if username:
+        return f"@{username} you have an OpenHands account but haven't linked it to this workspace yet. Please link it at [OpenHands Cloud]({HOST_URL}) under Settings > Integrations and try again."
+    return f"You have an OpenHands account but haven't linked it to this workspace yet. Please link it at [OpenHands Cloud]({HOST_URL}) under Settings > Integrations and try again."
+
+
 OPENHANDS_RESOLVER_TEMPLATES_DIR = (
     os.getenv('OPENHANDS_RESOLVER_TEMPLATES_DIR')
     or 'openhands/app_server/integrations/templates/resolver/'
