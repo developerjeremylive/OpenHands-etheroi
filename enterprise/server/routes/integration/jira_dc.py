@@ -57,7 +57,14 @@ class JiraDcWorkspaceCreate(BaseModel):
         ),
     )
     svc_acc_email: str = Field(..., description='Service account email')
-    svc_acc_api_key: str = Field(..., description='Service account API token/PAT')
+    svc_acc_api_key: str | None = Field(
+        default=None,
+        description=(
+            'Service account API token/PAT. Required when creating a new '
+            'workspace; optional on update — omit/leave blank to keep the '
+            'stored value (so admins never have to re-paste it to edit).'
+        ),
+    )
     admin_api_key: str | None = Field(
         default=None,
         description=(
@@ -97,7 +104,7 @@ class JiraDcWorkspaceCreate(BaseModel):
     @field_validator('svc_acc_api_key')
     @classmethod
     def validate_svc_acc_api_key(cls, v):
-        if ' ' in v:
+        if v is not None and ' ' in v:
             raise ValueError('svc_acc_api_key cannot contain spaces')
         return v
 
@@ -122,6 +129,9 @@ class JiraDcWorkspaceResponse(BaseModel):
     name: str
     status: str
     editable: bool
+    # Service-account email is non-secret and is returned so the configure form
+    # can pre-fill it when editing. The service-account PAT is never returned.
+    svc_acc_email: str | None = None
     created_at: str
     updated_at: str
 
@@ -370,18 +380,27 @@ async def create_jira_dc_workspace(
                 detail='User ID not found',
             )
 
+        # Look up the workspace once; reused by both the OAuth and email paths.
+        existing_workspace = (
+            await jira_dc_manager.integration_store.get_workspace_by_name(
+                workspace_data.workspace_name
+            )
+        )
+        provided_api_key = (workspace_data.svc_acc_api_key or '').strip()
+        # The service-account PAT is required to create a NEW workspace, but is
+        # optional when editing one (blank = keep the stored token), so admins
+        # never have to re-paste it just to change other fields.
+        if existing_workspace is None and not provided_api_key:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail='A service account PAT is required when configuring a new workspace.',
+            )
+
         if JIRA_DC_ENABLE_OAUTH:
-            existing_workspace = None
-            if workspace_data.webhook_secret is None:
-                existing_workspace = (
-                    await jira_dc_manager.integration_store.get_workspace_by_name(
-                        workspace_data.workspace_name
-                    )
+            if existing_workspace:
+                await _validate_workspace_update_permissions(
+                    user_id, workspace_data.workspace_name
                 )
-                if existing_workspace:
-                    await _validate_workspace_update_permissions(
-                        user_id, workspace_data.workspace_name
-                    )
             resolved_webhook_secret = _resolve_webhook_secret(
                 workspace_data.webhook_secret,
                 existing_workspace.webhook_secret if existing_workspace else None,
@@ -397,7 +416,9 @@ async def create_jira_dc_workspace(
                 'target_workspace': workspace_data.workspace_name,
                 'webhook_secret': resolved_webhook_secret,
                 'svc_acc_email': workspace_data.svc_acc_email,
-                'svc_acc_api_key': workspace_data.svc_acc_api_key,
+                # Empty when editing without changing the PAT; the callback then
+                # keeps the workspace's stored token instead of overwriting it.
+                'svc_acc_api_key': provided_api_key,
                 'admin_api_key': workspace_data.admin_api_key,
                 'is_active': workspace_data.is_active,
                 'state': state,
@@ -434,9 +455,7 @@ async def create_jira_dc_workspace(
             )
         else:
             # OAuth flow disabled - directly create workspace
-            workspace = await jira_dc_manager.integration_store.get_workspace_by_name(
-                workspace_data.workspace_name
-            )
+            workspace = existing_workspace
             if not workspace:
                 resolved_webhook_secret = _resolve_webhook_secret(
                     workspace_data.webhook_secret
@@ -445,9 +464,7 @@ async def create_jira_dc_workspace(
                 encrypted_webhook_secret = token_manager.encrypt_text(
                     resolved_webhook_secret
                 )
-                encrypted_svc_acc_api_key = token_manager.encrypt_text(
-                    workspace_data.svc_acc_api_key
-                )
+                encrypted_svc_acc_api_key = token_manager.encrypt_text(provided_api_key)
 
                 workspace = await jira_dc_manager.integration_store.create_workspace(
                     name=workspace_data.workspace_name,
@@ -474,8 +491,12 @@ async def create_jira_dc_workspace(
                 encrypted_webhook_secret = token_manager.encrypt_text(
                     resolved_webhook_secret
                 )
-                encrypted_svc_acc_api_key = token_manager.encrypt_text(
-                    workspace_data.svc_acc_api_key
+                # None when the admin left the PAT blank on edit → the store
+                # preserves the existing encrypted token.
+                encrypted_svc_acc_api_key = (
+                    token_manager.encrypt_text(provided_api_key)
+                    if provided_api_key
+                    else None
                 )
 
                 # Update workspace details
@@ -677,8 +698,11 @@ async def jira_dc_callback(request: Request, code: str, state: str):
             encrypted_webhook_secret = token_manager.encrypt_text(
                 integration_session['webhook_secret']
             )
-            encrypted_svc_acc_api_key = token_manager.encrypt_text(
-                integration_session['svc_acc_api_key']
+            # Empty session PAT (admin edited without changing it) → None so the
+            # store preserves the existing encrypted token.
+            session_api_key = integration_session.get('svc_acc_api_key')
+            encrypted_svc_acc_api_key = (
+                token_manager.encrypt_text(session_api_key) if session_api_key else None
             )
 
             # Update workspace details
@@ -760,6 +784,7 @@ async def get_current_workspace_link(request: Request):
                 name=workspace.name,
                 status=workspace.status,
                 editable=workspace.admin_user_id == user.keycloak_user_id,
+                svc_acc_email=workspace.svc_acc_email,
                 created_at=workspace.created_at.isoformat(),
                 updated_at=workspace.updated_at.isoformat(),
             ),

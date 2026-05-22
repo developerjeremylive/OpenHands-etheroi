@@ -33,9 +33,13 @@ export function useConfigureIntegration(
       const input: Record<string, unknown> = {
         workspace_name: data.workspace,
         svc_acc_email: data.serviceAccountEmail,
-        svc_acc_api_key: data.serviceAccountApiKey,
         is_active: data.isActive,
       };
+      // Omit an empty service-account PAT so the server keeps the stored one
+      // when editing (Jira DC); required server-side for a new workspace.
+      if (data.serviceAccountApiKey) {
+        input.svc_acc_api_key = data.serviceAccountApiKey;
+      }
       // Omit an empty webhook secret so the server generates one (Jira DC
       // auto-enroll); send it verbatim otherwise.
       if (data.webhookSecret) {
