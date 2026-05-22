@@ -93,6 +93,7 @@ export function JiraDcIntegrationPanel() {
     setModalView("edit");
   };
   const openRemove = () => {
+    seedForm();
     setRemoveAdminApiKey("");
     setModalView("remove");
   };
@@ -141,6 +142,21 @@ export function JiraDcIntegrationPanel() {
 
   const confirmRemove = () => {
     unlinkMutation.mutate(removeAdminApiKey.trim() || undefined);
+  };
+
+  // Active/paused lives on the Remove screen (a softer alternative to removal),
+  // not the edit form. Persists just the status via the normal configure path
+  // (blank PAT/secret = keep stored).
+  const storedActive = existingWorkspace?.status === "active";
+  const applyActiveChange = () => {
+    configureMutation.mutate({
+      workspace,
+      webhookSecret: "",
+      serviceAccountEmail,
+      serviceAccountApiKey: "",
+      adminApiKey: "",
+      isActive,
+    });
   };
 
   // PAT required to create a new workspace; optional on edit (blank keeps the
@@ -294,7 +310,7 @@ export function JiraDcIntegrationPanel() {
                 platform: t(I18nKey.PROJECT_MANAGEMENT$JIRA_DC_PLATFORM_NAME),
               })}
             />
-            <div className="flex flex-col gap-6 w-full">
+            <div className="flex flex-col gap-4 w-full">
               {/* Server */}
               <div className="flex flex-col gap-2">
                 {sectionLabel(
@@ -320,7 +336,7 @@ export function JiraDcIntegrationPanel() {
               </div>
 
               {/* Webhook (inbound) */}
-              <div className="flex flex-col gap-3 border-t border-neutral-800 pt-5">
+              <div className="flex flex-col gap-3 border-t border-neutral-800 pt-4">
                 <div>
                   {sectionLabel(
                     I18nKey.PROJECT_MANAGEMENT$JIRA_DC_WEBHOOK_SECTION_LABEL,
@@ -369,7 +385,6 @@ export function JiraDcIntegrationPanel() {
                       onChange={setAdminApiKey}
                       className="w-full"
                       type="password"
-                      showOptionalTag={!!existingWorkspace}
                     />
                     <p className="text-xs text-tertiary-alt mt-1">
                       {t(
@@ -405,7 +420,7 @@ export function JiraDcIntegrationPanel() {
               </div>
 
               {/* Service account (outbound) */}
-              <div className="flex flex-col gap-3 border-t border-neutral-800 pt-5">
+              <div className="flex flex-col gap-3 border-t border-neutral-800 pt-4">
                 <div>
                   {sectionLabel(
                     I18nKey.PROJECT_MANAGEMENT$JIRA_DC_SERVICE_ACCOUNT_SECTION_LABEL,
@@ -452,22 +467,6 @@ export function JiraDcIntegrationPanel() {
                   )}
                 </div>
               </div>
-
-              {/* Active — only meaningful for an already-connected integration */}
-              {existingWorkspace && (
-                <div className="border-t border-neutral-800 pt-5">
-                  <SettingsSwitch
-                    testId="active-toggle"
-                    onToggle={setIsActive}
-                    isToggled={isActive}
-                  >
-                    {t(I18nKey.PROJECT_MANAGEMENT$ACTIVE_TOGGLE_LABEL)}
-                  </SettingsSwitch>
-                  <p className="text-xs text-tertiary-alt mt-1">
-                    {t(I18nKey.PROJECT_MANAGEMENT$ACTIVE_TOGGLE_HELP)}
-                  </p>
-                </div>
-              )}
             </div>
 
             <div className="flex items-center gap-3 w-full">
@@ -504,6 +503,31 @@ export function JiraDcIntegrationPanel() {
                 I18nKey.PROJECT_MANAGEMENT$REMOVE_INTEGRATION_BUTTON_LABEL,
               )}
             />
+            {/* Pause option — deactivate without removing. */}
+            <div className="w-full flex flex-col gap-1 border-b border-neutral-800 pb-4">
+              <SettingsSwitch
+                testId="active-toggle"
+                onToggle={setIsActive}
+                isToggled={isActive}
+              >
+                {t(I18nKey.PROJECT_MANAGEMENT$ACTIVE_TOGGLE_LABEL)}
+              </SettingsSwitch>
+              <p className="text-xs text-tertiary-alt">
+                {t(I18nKey.PROJECT_MANAGEMENT$ACTIVE_TOGGLE_HELP)}
+              </p>
+              {isActive !== storedActive && (
+                <BrandButton
+                  variant="primary"
+                  onClick={applyActiveChange}
+                  testId="jira-dc-apply-active-button"
+                  type="button"
+                  isDisabled={isBusy}
+                  className="mt-1 w-fit"
+                >
+                  {t(I18nKey.PROJECT_MANAGEMENT$UPDATE_BUTTON_LABEL)}
+                </BrandButton>
+              )}
+            </div>
             <p className="text-sm text-tertiary-alt">
               {t(
                 removeAdminApiKey.trim()
