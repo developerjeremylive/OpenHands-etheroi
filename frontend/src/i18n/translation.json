@@ -26059,5 +26059,39 @@
     "ca": "Jira Data Center",
     "tr": "Jira Data Center",
     "uk": "Jira Data Center"
+  },
+  "PROJECT_MANAGEMENT$JIRA_DC_SUMMARY_POSTS_AS": {
+    "en": "Posts as",
+    "ja": "Posts as",
+    "zh-CN": "Posts as",
+    "zh-TW": "Posts as",
+    "ko-KR": "Posts as",
+    "no": "Posts as",
+    "ar": "Posts as",
+    "de": "Posts as",
+    "fr": "Posts as",
+    "it": "Posts as",
+    "pt": "Posts as",
+    "es": "Posts as",
+    "ca": "Posts as",
+    "tr": "Posts as",
+    "uk": "Posts as"
+  },
+  "PROJECT_MANAGEMENT$JIRA_DC_EDIT_BUTTON_LABEL": {
+    "en": "Edit configuration",
+    "ja": "Edit configuration",
+    "zh-CN": "Edit configuration",
+    "zh-TW": "Edit configuration",
+    "ko-KR": "Edit configuration",
+    "no": "Edit configuration",
+    "ar": "Edit configuration",
+    "de": "Edit configuration",
+    "fr": "Edit configuration",
+    "it": "Edit configuration",
+    "pt": "Edit configuration",
+    "es": "Edit configuration",
+    "ca": "Edit configuration",
+    "tr": "Edit configuration",
+    "uk": "Edit configuration"
   }
 }
