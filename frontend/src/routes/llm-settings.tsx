@@ -590,7 +590,13 @@ export function LlmSettingsScreen({
         ]}
         header={buildHeader}
         buildPayload={buildPayload}
-        extraDirty={profileName.trim() !== initialProfileName.trim()}
+        // The profile form can always be saved: it snapshots the current LLM
+        // config as a profile, and the name is optional — it falls back to a
+        // model-derived default in handleSaveSuccess. So don't gate Save on the
+        // settings fields being dirty. This matters in SaaS managed mode, where
+        // the model is fixed and there's no editable API key, leaving the form
+        // pristine and Save stuck disabled.
+        extraDirty={shouldShowProfilesForScope}
         onSaveSuccess={handleSaveSuccess}
         getInitialView={getInitialView}
         forceShowAdvancedView

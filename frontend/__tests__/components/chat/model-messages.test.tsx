@@ -73,7 +73,7 @@ describe("<ModelMessages />", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("starts collapsed and reveals rows with model and base_url (no api_key) on expansion", async () => {
+  it("starts collapsed, reveals profile rows, then model + base_url (no api_key) on row expansion", async () => {
     useModelStore.getState().show(CONV, null, [
       profile("default", {
         model: "anthropic/claude-sonnet-4-6",
@@ -89,19 +89,25 @@ describe("<ModelMessages />", () => {
 
     expect(screen.getByText("MODEL$AVAILABLE_PROFILES")).toBeInTheDocument();
     // Outer toggle is collapsed: profile rows are not in the document yet.
-    expect(screen.queryByText("default")).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: /default/i }),
+    ).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /expand/i }));
 
-    // Each row shows its name with model and base_url directly beneath it.
-    expect(screen.getByText("default")).toBeInTheDocument();
-    expect(screen.getByText("scratch")).toBeInTheDocument();
-    expect(screen.getByText(/model:\s+openai\/gpt-5/)).toBeInTheDocument();
+    // Profile rows are now visible (as toggles), but their details stay
+    // collapsed until the row is opened.
     expect(
-      screen.getByText(/base_url:\s+https:\/\/api\.example\.com/),
+      screen.getByRole("button", { name: /default/i }),
     ).toBeInTheDocument();
+    expect(screen.queryByText(/model:/i)).toBeNull();
 
-    // The api_key is never shown in the /model list.
+    // Opening a row reveals just its model and base_url — never the api_key.
+    await user.click(screen.getByRole("button", { name: /default/i }));
+    expect(
+      screen.getByText(/model:\s+anthropic\/claude-sonnet-4-6/),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/base_url:/i)).toBeInTheDocument();
     expect(screen.queryByText(/api_key/i)).toBeNull();
   });
 

@@ -1,4 +1,6 @@
+import React from "react";
 import { Trans, useTranslation } from "react-i18next";
+import { ChevronDown, ChevronRight } from "lucide-react";
 import { useModelStore } from "#/stores/model-store";
 import { Typography } from "#/ui/typography";
 import { I18nKey } from "#/i18n/declaration";
@@ -11,15 +13,31 @@ interface ProfileRowProps {
 }
 
 function ProfileRow({ profile }: ProfileRowProps) {
+  const [expanded, setExpanded] = React.useState(false);
+
   return (
-    <div className="border border-neutral-700 rounded-md px-2 py-1.5">
-      <Typography.Text className="font-semibold text-neutral-200 text-sm">
-        {profile.name}
-      </Typography.Text>
-      <div className="mt-1 text-xs text-neutral-300 font-mono whitespace-pre-wrap">
-        {`model:    ${profile.model ?? "—"}\n` +
-          `base_url: ${profile.base_url ?? "—"}`}
-      </div>
+    <div className="border border-neutral-700 rounded-md overflow-hidden">
+      <button
+        type="button"
+        onClick={() => setExpanded((v) => !v)}
+        className="w-full py-1.5 px-2 text-left flex items-center gap-2 hover:bg-neutral-700 transition-colors cursor-pointer"
+      >
+        <Typography.Text className="text-neutral-300">
+          {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+        </Typography.Text>
+        <Typography.Text className="font-semibold text-neutral-200 text-sm">
+          {profile.name}
+        </Typography.Text>
+      </button>
+      {expanded && (
+        <>
+          <hr className="border-neutral-700" />
+          <div className="px-3 py-2 text-xs text-neutral-300 font-mono whitespace-pre-wrap">
+            {`model:    ${profile.model ?? "—"}\n` +
+              `base_url: ${profile.base_url ?? "—"}`}
+          </div>
+        </>
+      )}
     </div>
   );
 }

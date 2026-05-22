@@ -43,6 +43,13 @@ export function SwitchProfileButton() {
       ? (profiles.find((p) => p.model === conversationModel)?.name ?? null)
       : (data?.active_profile ?? null));
 
+  // The active profile's provider/model, surfaced as a tooltip on the button
+  // (the dropdown shows it under each name). Matches agent-canvas.
+  const activeProfileModel =
+    profiles.find((p) => p.name === activeProfileName)?.model ??
+    conversationModel ??
+    null;
+
   // LLM profiles don't apply to ACP conversations: the sub-agent
   // (Claude Code / Codex / Gemini CLI) drives its own model selection,
   // and ``llm_model`` is intentionally null. Hide the toggle so the user
@@ -73,6 +80,7 @@ export function SwitchProfileButton() {
         onClick={handleClick}
         disabled={isPending}
         data-testid="switch-profile-button"
+        title={activeProfileModel ?? undefined}
         aria-haspopup="menu"
         aria-expanded={contextMenuOpen}
         className="flex items-center gap-1 border border-[#4B505F] rounded-[100px] transition-opacity cursor-pointer hover:opacity-80 disabled:opacity-50 disabled:cursor-not-allowed pl-2 max-w-[200px]"
