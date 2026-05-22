@@ -311,7 +311,7 @@ class JiraDcExistingConversationView(JiraDcViewInterface):
             )
 
             url = (
-                f"{agent_server_url.rstrip('/')}"
+                f'{agent_server_url.rstrip("/")}'
                 f'/api/conversations/{self.conversation_id}/messages'
             )
             headers = {'X-Session-API-Key': sandbox.session_api_key}

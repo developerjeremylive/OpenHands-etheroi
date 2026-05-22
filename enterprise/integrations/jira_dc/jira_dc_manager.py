@@ -505,7 +505,10 @@ class JiraDcManager(Manager[JiraDcViewInterface]):
         headers = {'Authorization': f'Bearer {svc_acc_api_key}'}
         # '-created' + reverse keeps the tail (most recent N) of long threads,
         # which is the relevant part, rather than the oldest N.
-        params = {'orderBy': '-created', 'maxResults': max_comments}
+        params: dict[str, str | int] = {
+            'orderBy': '-created',
+            'maxResults': max_comments,
+        }
         try:
             async with httpx.AsyncClient(verify=httpx_verify_option()) as client:
                 response = await client.get(url, headers=headers, params=params)
@@ -536,9 +539,7 @@ class JiraDcManager(Manager[JiraDcViewInterface]):
                         created_at=raw.get('created'),
                         updated_at=raw.get('updated') or raw.get('created'),
                         system=bool(
-                            bot_email
-                            and author_email
-                            and author_email == bot_email
+                            bot_email and author_email and author_email == bot_email
                         ),
                     )
                 )
