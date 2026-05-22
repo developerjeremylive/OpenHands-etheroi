@@ -1,9 +1,15 @@
-You have received a follow-up message regarding issue {{ issue_key }}.
+You have received a follow-up regarding issue {{ issue_key }}.
+{% if user_message %}
 
 # New request addressed to you
 This is the actionable follow-up. Act on THIS; treat earlier comments as context only:
 
 {{ user_message }}
+{% else %}
+
+# Your task
+This issue was re-flagged via the "openhands" label (no new comment). Re-check the Title and Description below and continue accordingly. Treat earlier comments as context only.
+{% endif %}
 
 The latest issue title and description are included below in case the user added context or updates. Compare with what you already know to stay current.
 
