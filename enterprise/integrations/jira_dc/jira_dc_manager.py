@@ -33,7 +33,7 @@ from storage.jira_dc_user import JiraDcUser
 from storage.jira_dc_workspace import JiraDcWorkspace
 
 from openhands.app_server.integrations.provider import ProviderHandler
-from openhands.app_server.integrations.service_types import Repository
+from openhands.app_server.integrations.service_types import Comment, Repository
 from openhands.app_server.shared import server_config
 from openhands.app_server.types import (
     LLMAuthenticationError,
@@ -309,6 +309,9 @@ class JiraDcManager(Manager[JiraDcViewInterface]):
             )
             job_context.issue_title = issue_title
             job_context.issue_description = issue_description
+            job_context.previous_comments = await self.get_issue_comments(
+                job_context, api_key, bot_email=workspace.svc_acc_email
+            )
         except Exception as e:
             logger.error(f'[Jira DC] Failed to get issue context: {str(e)}')
             await self._send_error_comment(
@@ -477,6 +480,72 @@ class JiraDcManager(Manager[JiraDcViewInterface]):
             )
 
         return title, description
+
+    async def get_issue_comments(
+        self,
+        job_context: JobContext,
+        svc_acc_api_key: str,
+        bot_email: str | None = None,
+        max_comments: int = 15,
+    ) -> list[Comment]:
+        """Fetch the issue's comment thread for conversation context.
+
+        Returns up to ``max_comments`` of the most recent comments in
+        chronological (oldest-first) order, excluding the triggering comment
+        (which is surfaced separately as the actionable request). Comments
+        authored by the integration's service account are flagged via
+        ``Comment.system`` so the prompt can label them as OpenHands' own prior
+        replies rather than instructions. Best-effort: any failure returns an
+        empty list so a transient comments-API issue never blocks the job.
+        """
+        url = (
+            f'{job_context.base_api_url}/rest/api/2/issue/'
+            f'{job_context.issue_key}/comment'
+        )
+        headers = {'Authorization': f'Bearer {svc_acc_api_key}'}
+        # '-created' + reverse keeps the tail (most recent N) of long threads,
+        # which is the relevant part, rather than the oldest N.
+        params = {'orderBy': '-created', 'maxResults': max_comments}
+        try:
+            async with httpx.AsyncClient(verify=httpx_verify_option()) as client:
+                response = await client.get(url, headers=headers, params=params)
+                response.raise_for_status()
+                raw_comments = response.json().get('comments', [])
+        except Exception as e:
+            logger.warning(
+                f'[Jira DC] Failed to fetch comment thread for '
+                f'{job_context.issue_key} (non-fatal, continuing without '
+                f'history): {str(e)}'
+            )
+            return []
+
+        comments: list[Comment] = []
+        for raw in reversed(raw_comments):  # restore oldest -> newest order
+            try:
+                if str(raw.get('id', '')) == str(job_context.comment_id):
+                    continue  # shown separately as the actionable request
+                author = raw.get('author', {}) or {}
+                author_email = author.get('emailAddress')
+                comments.append(
+                    Comment(
+                        id=str(raw.get('id', '')),
+                        body=raw.get('body', '') or '',
+                        author=author.get('displayName')
+                        or author.get('name')
+                        or 'unknown',
+                        created_at=raw.get('created'),
+                        updated_at=raw.get('updated') or raw.get('created'),
+                        system=bool(
+                            bot_email
+                            and author_email
+                            and author_email == bot_email
+                        ),
+                    )
+                )
+            except Exception as e:
+                logger.debug(f'[Jira DC] Skipping unparseable comment: {str(e)}')
+                continue
+        return comments
 
     async def send_message(
         self, message: str, issue_key: str, base_api_url: str, svc_acc_api_key: str

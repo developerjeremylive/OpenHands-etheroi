@@ -69,6 +69,7 @@ class JiraDcNewConversationView(JiraDcViewInterface):
             issue_title=self.job_context.issue_title,
             issue_description=self.job_context.issue_description,
             user_message=self.job_context.user_msg or '',
+            previous_comments=self.job_context.previous_comments,
         )
 
         return instructions, user_msg
@@ -231,6 +232,7 @@ class JiraDcExistingConversationView(JiraDcViewInterface):
             user_message=self.job_context.user_msg or '',
             issue_title=self.job_context.issue_title,
             issue_description=self.job_context.issue_description,
+            previous_comments=self.job_context.previous_comments,
         )
 
         return '', user_msg
