@@ -252,20 +252,29 @@ export function JiraDcIntegrationPanel() {
                   </button>
                 </div>
                 {!manualMode ? (
-                  <SettingsInput
-                    testId="admin-api-key-input"
-                    label={t(
-                      I18nKey.PROJECT_MANAGEMENT$JIRA_DC_ADMIN_TOKEN_LABEL,
-                    )}
-                    placeholder={t(
-                      I18nKey.PROJECT_MANAGEMENT$JIRA_DC_ADMIN_TOKEN_PLACEHOLDER,
-                    )}
-                    value={adminApiKey}
-                    onChange={setAdminApiKey}
-                    className="w-full"
-                    type="password"
-                    showOptionalTag={!!existingWorkspace}
-                  />
+                  <div>
+                    <SettingsInput
+                      testId="admin-api-key-input"
+                      label={t(
+                        I18nKey.PROJECT_MANAGEMENT$JIRA_DC_ADMIN_TOKEN_LABEL,
+                      )}
+                      placeholder={t(
+                        I18nKey.PROJECT_MANAGEMENT$JIRA_DC_ADMIN_TOKEN_PLACEHOLDER,
+                      )}
+                      value={adminApiKey}
+                      onChange={setAdminApiKey}
+                      className="w-full"
+                      type="password"
+                      showOptionalTag={!!existingWorkspace}
+                    />
+                    <p className="text-xs text-tertiary-alt mt-1">
+                      {t(
+                        existingWorkspace
+                          ? I18nKey.PROJECT_MANAGEMENT$JIRA_DC_EXISTING_ADMIN_TOKEN_HELP
+                          : I18nKey.PROJECT_MANAGEMENT$JIRA_DC_ADMIN_TOKEN_HELP,
+                      )}
+                    </p>
+                  </div>
                 ) : (
                   <div className="flex flex-col gap-3">
                     <p className="text-xs text-tertiary-alt">
@@ -340,18 +349,23 @@ export function JiraDcIntegrationPanel() {
                 </div>
               </div>
 
-              <div>
-                <SettingsSwitch
-                  testId="active-toggle"
-                  onToggle={setIsActive}
-                  isToggled={isActive}
-                >
-                  {t(I18nKey.PROJECT_MANAGEMENT$ACTIVE_TOGGLE_LABEL)}
-                </SettingsSwitch>
-                <p className="text-xs text-tertiary-alt mt-1">
-                  {t(I18nKey.PROJECT_MANAGEMENT$ACTIVE_TOGGLE_HELP)}
-                </p>
-              </div>
+              {/* Active is a management control for an already-connected
+                  integration (pause it). On first-time setup there's nothing to
+                  pause — connecting implies active — so it's hidden until edit. */}
+              {existingWorkspace && (
+                <div>
+                  <SettingsSwitch
+                    testId="active-toggle"
+                    onToggle={setIsActive}
+                    isToggled={isActive}
+                  >
+                    {t(I18nKey.PROJECT_MANAGEMENT$ACTIVE_TOGGLE_LABEL)}
+                  </SettingsSwitch>
+                  <p className="text-xs text-tertiary-alt mt-1">
+                    {t(I18nKey.PROJECT_MANAGEMENT$ACTIVE_TOGGLE_HELP)}
+                  </p>
+                </div>
+              )}
             </div>
           </div>
 
