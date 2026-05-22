@@ -26093,5 +26093,39 @@
     "ca": "Edit configuration",
     "tr": "Edit configuration",
     "uk": "Edit configuration"
+  },
+  "PROJECT_MANAGEMENT$JIRA_DC_COL_STATUS": {
+    "en": "Status",
+    "ja": "Status",
+    "zh-CN": "Status",
+    "zh-TW": "Status",
+    "ko-KR": "Status",
+    "no": "Status",
+    "ar": "Status",
+    "de": "Status",
+    "fr": "Status",
+    "it": "Status",
+    "pt": "Status",
+    "es": "Status",
+    "ca": "Status",
+    "tr": "Status",
+    "uk": "Status"
+  },
+  "PROJECT_MANAGEMENT$JIRA_DC_COL_ACTION": {
+    "en": "Action",
+    "ja": "Action",
+    "zh-CN": "Action",
+    "zh-TW": "Action",
+    "ko-KR": "Action",
+    "no": "Action",
+    "ar": "Action",
+    "de": "Action",
+    "fr": "Action",
+    "it": "Action",
+    "pt": "Action",
+    "es": "Action",
+    "ca": "Action",
+    "tr": "Action",
+    "uk": "Action"
   }
 }
